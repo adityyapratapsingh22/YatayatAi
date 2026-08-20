@@ -1,0 +1,6 @@
+{
+  "name": "AI Traffic Core",
+  "description": "Synthetic traffic intelligence platform for real-time corridor monitoring, sensor telemetry, predictive analytics, and automated reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

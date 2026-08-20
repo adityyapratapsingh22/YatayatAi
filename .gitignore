@@ -1,0 +1,36 @@
+# Python
+backend/venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# YOLO model weights (auto-downloaded on first run, no need to commit ~6MB+ files)
+*.pt
+
+# Uploaded videos and inference output
+backend/uploaded_videos/
+backend/runs/
+backend/*.mp4
+backend/*.jpg
+
+# Database (generated at runtime, not source code)
+database/*.db
+database/traffic_analyzer.db
+
+# Temporary inspection zips (not part of the project)
+backend_source.zip
+frontend_source.zip
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor junk
+.vscode/
+.idea/
