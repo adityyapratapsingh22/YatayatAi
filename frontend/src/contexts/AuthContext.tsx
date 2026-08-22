@@ -12,6 +12,8 @@ interface AuthContextType {
   logout: () => void;
   forgotPassword: (email: string) => Promise<string>;
   resetPassword: (token: string, newPassword: string) => Promise<string>;
+  updateProfile: (fullName: string, email: string) => Promise<void>;
+  uploadAvatar: (file: File) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,8 +22,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // On first load, if tokens already exist (returning visitor), validate them against
-  // the backend and restore the session -- rather than trusting localStorage blindly.
   useEffect(() => {
     const restoreSession = async () => {
       const token = tokenStorage.getAccessToken();
@@ -51,7 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = useCallback(async (email: string, fullName: string, password: string) => {
     await authApi.register(email, fullName, password);
-    await login(email, password); // auto-login immediately after successful signup
+    await login(email, password);
   }, [login]);
 
   const logout = useCallback(() => {
@@ -69,9 +69,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res.message;
   }, []);
 
+  // Updates both the backend AND the in-memory user immediately, so the sidebar/header
+  // name updates right away without needing a page refresh.
+  const updateProfile = useCallback(async (fullName: string, email: string) => {
+    const updated = await authApi.updateProfile(fullName, email);
+    setUser(updated);
+  }, []);
+
+  const uploadAvatar = useCallback(async (file: File) => {
+    const updated = await authApi.uploadAvatar(file);
+    setUser(updated);
+  }, []);
+
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!user, isLoading, login, register, logout, forgotPassword, resetPassword }}
+      value={{ user, isAuthenticated: !!user, isLoading, login, register, logout, forgotPassword, resetPassword, updateProfile, uploadAvatar }}
     >
       {children}
     </AuthContext.Provider>

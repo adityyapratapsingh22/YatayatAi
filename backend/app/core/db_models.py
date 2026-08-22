@@ -6,18 +6,20 @@ from app.core.database import Base
 
 
 class User(Base):
-    """A registered account. Sessions are tied to a user so each person only sees their own history."""
+    """A registered account. Sessions and settings are tied to a user."""
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
+    avatar_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     sessions = relationship("Session", back_populates="user")
     reset_tokens = relationship("PasswordResetToken", back_populates="user")
+    settings = relationship("UserSettings", back_populates="user", uselist=False)
 
 
 class PasswordResetToken(Base):
@@ -34,12 +36,31 @@ class PasswordResetToken(Base):
     user = relationship("User", back_populates="reset_tokens")
 
 
+class UserSettings(Base):
+    """Per-user pipeline configuration. One row per user, created with defaults on first access."""
+    __tablename__ = "user_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+
+    moderate_threshold = Column(Float, default=5.0)
+    heavy_threshold = Column(Float, default=12.0)
+    counting_line_position = Column(Float, default=65.0)
+    smoothing_window_seconds = Column(Float, default=2.0)
+    detection_sensitivity = Column(Float, default=75.0)
+    email_alerts_enabled = Column(Boolean, default=False)
+
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="settings")
+
+
 class Session(Base):
     """One row per video processed -- the parent record for that run's analytics."""
     __tablename__ = "sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # nullable to not break existing rows
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     video_id = Column(String, nullable=False)
     started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     ended_at = Column(DateTime, nullable=True)

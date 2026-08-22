@@ -1,7 +1,9 @@
+import os
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session as DBSession
+from sqlalchemy import func
 
 from app.core.database import get_db
 from app.core import db_models
@@ -24,9 +26,14 @@ from app.schemas.auth_schemas import (
     UserResponse,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    UpdateProfileRequest,
+    ChangePasswordRequest,
+    ProfileStatsResponse,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+AVATAR_DIR = "uploaded_avatars"
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -50,8 +57,6 @@ def register(payload: RegisterRequest, db: DBSession = Depends(get_db)):
 def login(payload: LoginRequest, db: DBSession = Depends(get_db)):
     user = db.query(db_models.User).filter(db_models.User.email == payload.email).first()
 
-    # Deliberately vague error message on both "no such user" and "wrong password" --
-    # being specific about which one is wrong helps an attacker enumerate valid accounts.
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
 
@@ -76,8 +81,6 @@ def refresh(payload: RefreshRequest, db: DBSession = Depends(get_db)):
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
-    # Issue a fresh pair -- rotating the refresh token on use limits how long a stolen
-    # refresh token stays valid if it's ever leaked.
     return TokenResponse(
         access_token=create_access_token(user.id),
         refresh_token=create_refresh_token(user.id),
@@ -89,12 +92,108 @@ def get_me(current_user: db_models.User = Depends(get_current_user)):
     return current_user
 
 
+@router.patch("/me", response_model=UserResponse)
+def update_me(
+    payload: UpdateProfileRequest,
+    db: DBSession = Depends(get_db),
+    current_user: db_models.User = Depends(get_current_user),
+):
+    if payload.email != current_user.email:
+        existing = db.query(db_models.User).filter(db_models.User.email == payload.email).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="That email is already in use by another account")
+
+    current_user.full_name = payload.full_name
+    current_user.email = payload.email
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: DBSession = Depends(get_db),
+    current_user: db_models.User = Depends(get_current_user),
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image")
+
+    contents = await file.read()
+    max_size_bytes = 5 * 1024 * 1024  # 5MB
+    if len(contents) > max_size_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Image must be under 5MB")
+
+    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+        ext = ".jpg"
+
+    os.makedirs(AVATAR_DIR, exist_ok=True)
+    filename = f"user_{current_user.id}{ext}"
+    filepath = os.path.join(AVATAR_DIR, filename)
+
+    # Clean up a previously uploaded avatar with a different extension, so re-uploading
+    # a PNG after a JPG doesn't leave the old file orphaned on disk.
+    if current_user.avatar_url:
+        old_filename = os.path.basename(current_user.avatar_url)
+        old_filepath = os.path.join(AVATAR_DIR, old_filename)
+        if old_filename != filename and os.path.exists(old_filepath):
+            os.remove(old_filepath)
+
+    with open(filepath, "wb") as f:
+        f.write(contents)
+
+    current_user.avatar_url = f"/avatars/{filename}"
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    payload: ChangePasswordRequest,
+    db: DBSession = Depends(get_db),
+    current_user: db_models.User = Depends(get_current_user),
+):
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
+
+    current_user.hashed_password = hash_password(payload.new_password)
+    db.add(current_user)
+    db.commit()
+    return {"message": "Password updated successfully"}
+
+
+@router.get("/me/stats", response_model=ProfileStatsResponse)
+def get_my_stats(
+    db: DBSession = Depends(get_db),
+    current_user: db_models.User = Depends(get_current_user),
+):
+    videos_analyzed = (
+        db.query(func.count(db_models.Session.id))
+        .filter(db_models.Session.user_id == current_user.id)
+        .scalar()
+    ) or 0
+
+    total_vehicles = (
+        db.query(func.coalesce(func.sum(db_models.Session.total_crossed), 0))
+        .filter(db_models.Session.user_id == current_user.id)
+        .scalar()
+    ) or 0
+
+    return ProfileStatsResponse(
+        videos_analyzed=videos_analyzed,
+        total_vehicles_counted=total_vehicles,
+        member_since=current_user.created_at,
+    )
+
+
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
 def forgot_password(payload: ForgotPasswordRequest, db: DBSession = Depends(get_db)):
     user = db.query(db_models.User).filter(db_models.User.email == payload.email).first()
 
-    # Always return the same response whether or not the email exists --
-    # otherwise this endpoint becomes a way to check who has an account.
     if user:
         reset_token = generate_reset_token()
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.RESET_TOKEN_EXPIRE_MINUTES)

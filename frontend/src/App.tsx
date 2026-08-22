@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { NavTab, SystemConfig, UserProfile } from './types';
-import { DEFAULT_SYSTEM_CONFIG, DEFAULT_USER_PROFILE } from './data';
+import { NavTab, UserProfile } from './types';
+import { DEFAULT_USER_PROFILE } from './data';
 import { useAnalyticsSocket } from './hooks/useAnalyticsSocket';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { getAccessToken } from './services/tokenStorage';
@@ -22,6 +22,8 @@ import { DeployModal } from './components/DeployModal';
 import { PdfExportModal } from './components/PdfExportModal';
 import { Check, Bell, X } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 const PROTECTED_TABS: NavTab[] = ['dashboard', 'reports', 'history', 'analytics', 'settings', 'profile'];
 const STANDALONE_TABS: NavTab[] = ['landing', 'login', 'register', 'forgot-password', 'reset-password'];
 
@@ -39,7 +41,6 @@ function AppShell() {
     return params.get('token');
   });
 
-  const [config, setConfig] = useState<SystemConfig>(DEFAULT_SYSTEM_CONFIG);
   const { connected, latest, history, error: wsError, connect } = useAnalyticsSocket();
   const [previewFile, setPreviewFile] = useState<File | null>(null);
 
@@ -147,7 +148,12 @@ function AppShell() {
   }
 
   const displayUser: UserProfile = user
-    ? { ...DEFAULT_USER_PROFILE, name: user.full_name, email: user.email }
+    ? {
+        ...DEFAULT_USER_PROFILE,
+        name: user.full_name,
+        email: user.email,
+        avatarUrl: user.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : DEFAULT_USER_PROFILE.avatarUrl,
+      }
     : DEFAULT_USER_PROFILE;
 
   return (
@@ -191,12 +197,7 @@ function AppShell() {
           {activeTab === 'reports' && <ReportsView onOpenPdfModal={() => setIsPdfModalOpen(true)} />}
           {activeTab === 'history' && <HistoryView />}
           {activeTab === 'analytics' && <ReportsView onOpenPdfModal={() => setIsPdfModalOpen(true)} />}
-          {activeTab === 'settings' && (
-            <SettingsView
-              config={config}
-              onSaveConfig={(newConf) => { setConfig(newConf); showToast('System configuration saved successfully!'); }}
-            />
-          )}
+           {activeTab === 'settings' && <SettingsView />}
           {activeTab === 'about' && <AboutView />}
           {activeTab === 'profile' && (
             <ProfileView user={displayUser} onUpdateUser={() => showToast('Profile updated!')} />

@@ -6,7 +6,6 @@ _model = None
 
 
 def get_model():
-    """Load the YOLO model once and reuse it across requests instead of reloading per video."""
     global _model
     if _model is None:
         _model = YOLO("yolov8n.pt")
@@ -18,16 +17,18 @@ def run_pipeline(
     line_y_ratio: float = 0.65,
     min_frames_before_count: int = 5,
     smoothing_window_seconds: float = 2,
-    light_threshold: int = 5,
-    moderate_threshold: int = 12,
+    light_threshold: float = 5,
+    moderate_threshold: float = 12,
+    confidence: float = 0.25,
     device: int = 0,
 ):
     """
     Runs detection + tracking + line-crossing counting + density estimation on a video,
-    yielding one analytics dict per processed frame. This is the same logic as
-    density_estimation.py, restructured as a generator so a caller (like a FastAPI
-    WebSocket route) can stream results live instead of waiting for the whole video
-    and printing a final summary.
+    yielding one analytics dict per processed frame.
+
+    confidence: YOLO's detection confidence threshold (0.0-1.0). Lower values detect more
+    objects (higher recall) at the cost of more false positives; higher values are stricter.
+    Ultralytics' default is 0.25.
     """
     model = get_model()
 
@@ -57,7 +58,12 @@ def run_pipeline(
             return "Heavy"
 
     results_stream = model.track(
-        source=video_path, tracker="bytetrack.yaml", device=device, persist=True, stream=True,
+        source=video_path,
+        tracker="bytetrack.yaml",
+        device=device,
+        persist=True,
+        stream=True,
+        conf=confidence,
     )
 
     frame_index = 0

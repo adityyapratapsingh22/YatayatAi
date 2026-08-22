@@ -15,9 +15,13 @@ frontend/.env.local
 
 # Uploaded videos and inference output
 backend/uploaded_videos/
+backend/uploaded_avatars/
 backend/runs/
 backend/*.mp4
 backend/*.jpg
+
+# Backend secrets (SECRET_KEY, SMTP credentials -- never commit real values)
+backend/.env
 
 # Database (generated at runtime, not source code)
 database/*.db
