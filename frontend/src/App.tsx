@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { NavTab, SystemConfig, UserProfile } from './types';
 import { DEFAULT_SYSTEM_CONFIG, DEFAULT_USER_PROFILE } from './data';
 import { useAnalyticsSocket } from './hooks/useAnalyticsSocket';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { getAccessToken } from './services/tokenStorage';
 import { Sidebar, TopNavbar } from './components/Navigation';
 import { Footer } from './components/Footer';
 import { LandingView } from './components/LandingView';
@@ -12,22 +14,35 @@ import { SettingsView } from './components/SettingsView';
 import { AboutView } from './components/AboutView';
 import { ProfileView } from './components/ProfileView';
 import { LoginView } from './components/LoginView';
+import { RegisterView } from './components/RegisterView';
+import { ForgotPasswordView } from './components/ForgotPasswordView';
+import { ResetPasswordView } from './components/ResetPasswordView';
 import { UploadModal } from './components/UploadModal';
 import { DeployModal } from './components/DeployModal';
 import { PdfExportModal } from './components/PdfExportModal';
 import { Check, Bell, X } from 'lucide-react';
 
-export function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>('landing');
-  const [user, setUser] = useState<UserProfile>(DEFAULT_USER_PROFILE);
-  const [config, setConfig] = useState<SystemConfig>(DEFAULT_SYSTEM_CONFIG);
+const PROTECTED_TABS: NavTab[] = ['dashboard', 'reports', 'history', 'analytics', 'settings', 'profile'];
+const STANDALONE_TABS: NavTab[] = ['landing', 'login', 'register', 'forgot-password', 'reset-password'];
 
-  // The one real WebSocket connection for this session, owned here so both the
-  // upload flow and the dashboard display can share the same live data.
+function AppShell() {
+  const { isAuthenticated, isLoading, user, logout } = useAuth();
+
+  // Reads the initial tab and reset-password token straight from the URL on first load,
+  // so a link like http://localhost:3000/reset-password?token=xyz lands on the right page.
+  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+    if (window.location.pathname === '/reset-password') return 'reset-password';
+    return 'landing';
+  });
+  const [resetToken] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('token');
+  });
+
+  const [config, setConfig] = useState<SystemConfig>(DEFAULT_SYSTEM_CONFIG);
   const { connected, latest, history, error: wsError, connect } = useAnalyticsSocket();
   const [previewFile, setPreviewFile] = useState<File | null>(null);
 
-  // Modals
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
@@ -39,6 +54,8 @@ export function App() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const navigate = (tab: NavTab) => setActiveTab(tab);
+
   const handleExportLiveData = () => {
     if (!latest) {
       showToast('No live data yet -- run an analysis first.');
@@ -48,7 +65,6 @@ export function App() {
       'Timestamp,Frame,Active Vehicles,Avg Active (smoothed),Total Crossed,Density Level',
       `"${new Date().toISOString()}",${latest.frame_index},${latest.active_vehicles},${latest.avg_active_vehicles},${latest.total_crossed},"${latest.density_level}"`,
     ].join('\n');
-
     const blob = new Blob([rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -61,36 +77,51 @@ export function App() {
     showToast('Live telemetry CSV exported.');
   };
 
-  // Called once the video has genuinely finished uploading to the backend.
-  // Connects the real WebSocket -- the dashboard fills in as frames actually stream in,
-  // there is no fabricated result here.
   const handleAnalysisComplete = (result: { video_id: string; filename: string; file: File }) => {
+    const token = getAccessToken();
+    if (!token) {
+      showToast('You must be logged in to run an analysis.');
+      return;
+    }
     setPreviewFile(result.file);
-    connect(result.video_id);
+    connect(result.video_id, token);
     showToast(`Analyzing ${result.filename}...`);
     setActiveTab('dashboard');
   };
 
-  // Render Login view standalone without layout if selected
+  const handleLogout = () => {
+    logout();
+    showToast('Signed out.');
+    setActiveTab('landing');
+  };
+
+  // --- Standalone, unauthenticated pages (no sidebar/topbar) ---
+
   if (activeTab === 'login') {
     return (
-      <LoginView
-        onSuccessLogin={() => {
-          showToast('Welcome back, Dr. Alex Vance');
-          setActiveTab('dashboard');
-        }}
-        onNavigateLanding={() => setActiveTab('landing')}
-      />
+      <LoginView onSuccessLogin={() => { showToast(`Welcome back, ${user?.full_name ?? ''}`); setActiveTab('dashboard'); }} onNavigate={navigate} />
     );
   }
 
-  // Render Landing page standalone with full hero and footer if on landing
+  if (activeTab === 'register') {
+    return (
+      <RegisterView onSuccessRegister={() => { showToast('Account created!'); setActiveTab('dashboard'); }} onNavigate={navigate} />
+    );
+  }
+
+  if (activeTab === 'forgot-password') {
+    return <ForgotPasswordView onNavigate={navigate} />;
+  }
+
+  if (activeTab === 'reset-password') {
+    return <ResetPasswordView token={resetToken} onNavigate={navigate} />;
+  }
+
   if (activeTab === 'landing') {
     return (
       <div className="flex flex-col min-h-screen bg-[#080808] text-[#F0F0F0] font-sans">
-        <LandingView onNavigate={(tab) => setActiveTab(tab)} />
-        <Footer onNavClick={(tab) => setActiveTab(tab)} />
-
+        <LandingView onNavigate={navigate} />
+        <Footer onNavClick={navigate} />
         {toastMessage && (
           <div className="fixed bottom-6 right-6 z-50 bg-[#0e0e0e] border border-white/20 text-white px-4 py-3 rounded shadow-2xl flex items-center gap-2 text-xs font-medium">
             <Check className="w-4 h-4 text-white" />
@@ -101,29 +132,48 @@ export function App() {
     );
   }
 
-  // Dashboard / App Workspace layout with Sidebar + Topbar
+  // --- Protected pages: redirect to login if not authenticated ---
+  if (PROTECTED_TABS.includes(activeTab)) {
+    if (isLoading) {
+      return (
+        <div className="min-h-screen bg-[#080808] flex items-center justify-center text-white/40 text-xs uppercase tracking-widest">
+          Checking session...
+        </div>
+      );
+    }
+    if (!isAuthenticated) {
+      return <LoginView onSuccessLogin={() => setActiveTab('dashboard')} onNavigate={navigate} />;
+    }
+  }
+
+  const displayUser: UserProfile = user
+    ? { ...DEFAULT_USER_PROFILE, name: user.full_name, email: user.email }
+    : DEFAULT_USER_PROFILE;
+
   return (
     <div className="flex min-h-screen bg-[#080808] text-[#F0F0F0] font-sans">
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        user={user}
+        setActiveTab={navigate}
+        user={displayUser}
         onDeployClick={() => setIsDeployModalOpen(true)}
         onExportLiveClick={handleExportLiveData}
         onNotificationClick={() => setNotificationsOpen(!notificationsOpen)}
         onHelpClick={() => setActiveTab('about')}
+        onLogout={handleLogout}
         notificationsCount={2}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
         <TopNavbar
           activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          user={user}
+          setActiveTab={navigate}
+          user={displayUser}
           onDeployClick={() => setIsDeployModalOpen(true)}
           onExportLiveClick={handleExportLiveData}
           onNotificationClick={() => setNotificationsOpen(!notificationsOpen)}
           onHelpClick={() => setActiveTab('about')}
+          onLogout={handleLogout}
           notificationsCount={2}
         />
 
@@ -138,37 +188,22 @@ export function App() {
               onOpenUploadModal={() => setIsUploadModalOpen(true)}
             />
           )}
-
           {activeTab === 'reports' && <ReportsView onOpenPdfModal={() => setIsPdfModalOpen(true)} />}
-
           {activeTab === 'history' && <HistoryView />}
-
           {activeTab === 'analytics' && <ReportsView onOpenPdfModal={() => setIsPdfModalOpen(true)} />}
-
           {activeTab === 'settings' && (
             <SettingsView
               config={config}
-              onSaveConfig={(newConf) => {
-                setConfig(newConf);
-                showToast('System configuration saved successfully!');
-              }}
+              onSaveConfig={(newConf) => { setConfig(newConf); showToast('System configuration saved successfully!'); }}
             />
           )}
-
           {activeTab === 'about' && <AboutView />}
-
           {activeTab === 'profile' && (
-            <ProfileView
-              user={user}
-              onUpdateUser={(updated) => {
-                setUser((prev) => ({ ...prev, ...updated }));
-                showToast('Profile updated!');
-              }}
-            />
+            <ProfileView user={displayUser} onUpdateUser={() => showToast('Profile updated!')} />
           )}
         </main>
 
-        <Footer onNavClick={(tab) => setActiveTab(tab)} />
+        <Footer onNavClick={navigate} />
       </div>
 
       <UploadModal
@@ -176,9 +211,7 @@ export function App() {
         onClose={() => setIsUploadModalOpen(false)}
         onAnalysisComplete={handleAnalysisComplete}
       />
-
       <DeployModal isOpen={isDeployModalOpen} onClose={() => setIsDeployModalOpen(false)} />
-
       <PdfExportModal isOpen={isPdfModalOpen} onClose={() => setIsPdfModalOpen(false)} />
 
       {notificationsOpen && (
@@ -212,6 +245,14 @@ export function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   );
 }
 

@@ -19,7 +19,9 @@ export function useAnalyticsSocket() {
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  const connect = useCallback((videoId: string) => {
+  // token is required now -- the backend rejects the WebSocket handshake (code 4401)
+  // if it's missing or invalid, since this endpoint is authenticated per-user.
+  const connect = useCallback((videoId: string, token: string) => {
     if (wsRef.current) {
       wsRef.current.close();
     }
@@ -28,11 +30,16 @@ export function useAnalyticsSocket() {
     setError(null);
     setLatest(null);
 
-    const ws = new WebSocket(`${WS_BASE_URL}/${videoId}`);
+    const ws = new WebSocket(`${WS_BASE_URL}/${videoId}?token=${encodeURIComponent(token)}`);
     wsRef.current = ws;
 
     ws.onopen = () => setConnected(true);
-    ws.onclose = () => setConnected(false);
+    ws.onclose = (event) => {
+      setConnected(false);
+      if (event.code === 4401) {
+        setError('Your session has expired. Please log in again.');
+      }
+    };
     ws.onerror = () => {
       setError('WebSocket connection error -- verify backend server is running at http://localhost:8000');
       setConnected(false);

@@ -27,6 +27,7 @@ interface NavigationProps {
   onExportLiveClick: () => void;
   onNotificationClick: () => void;
   onHelpClick: () => void;
+  onLogout: () => void;
   notificationsCount: number;
 }
 
@@ -34,6 +35,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
   activeTab,
   setActiveTab,
   onExportLiveClick,
+  onLogout,
 }) => {
   return (
     <aside className="hidden md:flex flex-col h-screen sticky top-0 bg-[#0c0c0c] text-white/80 w-64 border-r border-white/10 shrink-0 select-none z-30">
@@ -154,7 +156,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('login')}
+            onClick={onLogout}
             className="flex items-center gap-3 px-3 py-2 rounded text-[11px] uppercase tracking-wider text-rose-400/80 hover:bg-rose-950/30 transition-colors text-left"
           >
             <LogOut className="w-4 h-4" />
@@ -173,6 +175,7 @@ export const TopNavbar: React.FC<NavigationProps> = ({
   onDeployClick,
   onNotificationClick,
   onHelpClick,
+  onLogout,
   notificationsCount,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -361,10 +364,10 @@ export const TopNavbar: React.FC<NavigationProps> = ({
             User Profile
           </button>
           <button
-            onClick={() => { setActiveTab('login'); setMobileMenuOpen(false); }}
+            onClick={() => { onLogout(); setMobileMenuOpen(false); }}
             className="text-left py-2 px-3 text-xs tracking-wider uppercase text-rose-400 hover:bg-rose-950/20 rounded"
           >
-            Sign In / Sign Out
+            Sign Out
           </button>
         </div>
       )}

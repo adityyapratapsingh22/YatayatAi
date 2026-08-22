@@ -3,34 +3,34 @@ import shutil
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Depends, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session as DBSession
 
 from app.core.pipeline import run_pipeline
-from app.core.database import Base, engine, get_db
+from app.core.database import Base, engine, get_db, SessionLocal
 from app.core import db_models
+from app.core.dependencies import get_current_user
+from app.core.security import decode_token
+from app.api.auth_router import router as auth_router
 
-# Creates the sessions / frame_snapshots / vehicle_counts tables if they don't exist yet.
-# Safe to call every startup -- it does nothing if the tables are already there.
+# Creates all tables (including the new users / password_reset_tokens tables) if missing.
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Traffic Analyzer")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000", "*"],
-    allow_credentials=True,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
+
 UPLOAD_DIR = "uploaded_videos"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Only write a snapshot to the DB every N frames -- writing every single frame to
-# SQLite over a long video is wasteful; this still gives plenty of resolution for
-# a historical trend chart later.
 SNAPSHOT_EVERY_N_FRAMES = 15
 
 
@@ -40,7 +40,10 @@ def root():
 
 
 @app.post("/api/upload")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(
+    file: UploadFile = File(...),
+    current_user: db_models.User = Depends(get_current_user),
+):
     save_path = os.path.join(UPLOAD_DIR, file.filename)
     with open(save_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
@@ -48,9 +51,17 @@ async def upload_video(file: UploadFile = File(...)):
 
 
 @app.get("/api/sessions")
-def list_sessions(db: DBSession = Depends(get_db)):
-    """Returns every past processing session -- the historical record."""
-    sessions = db.query(db_models.Session).order_by(db_models.Session.id.desc()).all()
+def list_sessions(
+    db: DBSession = Depends(get_db),
+    current_user: db_models.User = Depends(get_current_user),
+):
+    """Returns only the CURRENT user's sessions -- not everyone's."""
+    sessions = (
+        db.query(db_models.Session)
+        .filter(db_models.Session.user_id == current_user.id)
+        .order_by(db_models.Session.id.desc())
+        .all()
+    )
     return [
         {
             "id": s.id,
@@ -65,18 +76,27 @@ def list_sessions(db: DBSession = Depends(get_db)):
 
 
 @app.get("/api/sessions/{session_id}")
-def get_session(session_id: int, db: DBSession = Depends(get_db)):
-    """Returns full detail for one session: per-class counts and the frame-by-frame trend."""
-    session = db.query(db_models.Session).filter(db_models.Session.id == session_id).first()
+def get_session(
+    session_id: int,
+    db: DBSession = Depends(get_db),
+    current_user: db_models.User = Depends(get_current_user),
+):
+    session = (
+        db.query(db_models.Session)
+        .filter(db_models.Session.id == session_id, db_models.Session.user_id == current_user.id)
+        .first()
+    )
     if not session:
-        return {"error": f"Session {session_id} not found"}
+        # 404, not 403 -- don't reveal that a session ID exists but belongs to someone else
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
-    counts = db.query(db_models.VehicleCount).filter(
-        db_models.VehicleCount.session_id == session_id
-    ).all()
-    snapshots = db.query(db_models.FrameSnapshot).filter(
-        db_models.FrameSnapshot.session_id == session_id
-    ).order_by(db_models.FrameSnapshot.frame_index).all()
+    counts = db.query(db_models.VehicleCount).filter(db_models.VehicleCount.session_id == session_id).all()
+    snapshots = (
+        db.query(db_models.FrameSnapshot)
+        .filter(db_models.FrameSnapshot.session_id == session_id)
+        .order_by(db_models.FrameSnapshot.frame_index)
+        .all()
+    )
 
     return {
         "id": session.id,
@@ -99,21 +119,31 @@ def get_session(session_id: int, db: DBSession = Depends(get_db)):
 
 
 @app.websocket("/ws/analytics/{video_id}")
-async def analytics_ws(websocket: WebSocket, video_id: str):
+async def analytics_ws(websocket: WebSocket, video_id: str, token: str = Query(...)):
+    # Browsers can't attach custom Authorization headers to a WebSocket handshake,
+    # so the access token is passed as a query param instead and validated manually here.
+    payload = decode_token(token)
+    if payload is None or payload.get("type") != "access":
+        await websocket.close(code=4401)  # custom code in the 4000-4999 app-defined range
+        return
+
+    db = SessionLocal()
+    user = db.query(db_models.User).filter(db_models.User.id == int(payload["sub"])).first()
+    if not user or not user.is_active:
+        await websocket.close(code=4401)
+        db.close()
+        return
+
     await websocket.accept()
     video_path = os.path.join(UPLOAD_DIR, video_id)
 
     if not os.path.exists(video_path):
         await websocket.send_json({"error": f"{video_id} not found. Upload it first via /api/upload"})
         await websocket.close()
+        db.close()
         return
 
-    # Open a DB session manually here since this isn't a normal request (can't use Depends
-    # inside a WebSocket route the same way) -- we're responsible for closing it ourselves.
-    from app.core.database import SessionLocal
-    db = SessionLocal()
-
-    db_session = db_models.Session(video_id=video_id, started_at=datetime.now(timezone.utc))
+    db_session = db_models.Session(user_id=user.id, video_id=video_id, started_at=datetime.now(timezone.utc))
     db.add(db_session)
     db.commit()
     db.refresh(db_session)
@@ -129,20 +159,18 @@ async def analytics_ws(websocket: WebSocket, video_id: str):
             last_density = update["density_level"]
 
             if update["frame_index"] % SNAPSHOT_EVERY_N_FRAMES == 0:
-                snapshot = db_models.FrameSnapshot(
+                db.add(db_models.FrameSnapshot(
                     session_id=db_session.id,
                     frame_index=update["frame_index"],
                     active_vehicles=update["active_vehicles"],
                     avg_active_vehicles=update["avg_active_vehicles"],
                     density_level=update["density_level"],
                     total_crossed_so_far=update["total_crossed"],
-                )
-                db.add(snapshot)
+                ))
                 db.commit()
 
             await asyncio.sleep(0)
 
-        # Video finished processing -- finalize the session record
         db_session.ended_at = datetime.now(timezone.utc)
         db_session.total_crossed = sum(last_counts_by_class.values())
         db_session.final_density = last_density

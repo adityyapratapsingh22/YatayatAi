@@ -1,13 +1,16 @@
-export type NavTab = 
+export type NavTab =
   | 'landing'
-  | 'dashboard' 
-  | 'reports' 
-  | 'history' 
-  | 'analytics' 
-  | 'settings' 
-  | 'about' 
-  | 'profile' 
-  | 'login';
+  | 'dashboard'
+  | 'reports'
+  | 'history'
+  | 'analytics'
+  | 'settings'
+  | 'about'
+  | 'profile'
+  | 'login'
+  | 'register'
+  | 'forgot-password'
+  | 'reset-password';
 
 export interface VehicleDetection {
   id: string;
