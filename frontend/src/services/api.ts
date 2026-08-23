@@ -106,3 +106,29 @@ export async function getSession(sessionId: number): Promise<SessionDetail> {
   }
   return response.json();
 }
+
+/** Downloads a session's PDF report. This can't be a plain <a href> link, since the
+ * endpoint requires an Authorization header -- so we fetch it as a blob and trigger
+ * the browser's save dialog manually instead. */
+export async function downloadSessionReport(sessionId: number, suggestedFilename?: string): Promise<void> {
+  const response = await authFetch(`${API_BASE_URL}/api/sessions/${sessionId}/report`);
+  if (!response.ok) {
+    throw new Error(`Failed to generate report: ${response.statusText}`);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+
+  // Try to use the server's suggested filename from Content-Disposition; fall back if absent.
+  const disposition = response.headers.get('Content-Disposition');
+  const match = disposition?.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] ?? suggestedFilename ?? `traffic_report_${sessionId}.pdf`;
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

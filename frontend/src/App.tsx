@@ -194,9 +194,9 @@ function AppShell() {
               onOpenUploadModal={() => setIsUploadModalOpen(true)}
             />
           )}
-          {activeTab === 'reports' && <ReportsView onOpenPdfModal={() => setIsPdfModalOpen(true)} />}
+          {activeTab === 'reports' && <ReportsView />}
           {activeTab === 'history' && <HistoryView />}
-          {activeTab === 'analytics' && <ReportsView onOpenPdfModal={() => setIsPdfModalOpen(true)} />}
+          {activeTab === 'analytics' && <ReportsView />}
            {activeTab === 'settings' && <SettingsView />}
           {activeTab === 'about' && <AboutView />}
           {activeTab === 'profile' && (

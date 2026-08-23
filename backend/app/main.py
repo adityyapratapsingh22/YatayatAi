@@ -3,7 +3,7 @@ import shutil
 import asyncio
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Depends, Query, HTTPException
+from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Depends, Query, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session as DBSession
@@ -14,6 +14,7 @@ from app.core import db_models
 from app.core.dependencies import get_current_user
 from app.core.security import decode_token
 from app.core.email_service import send_density_alert_email
+from app.core.report_generator import generate_session_report_pdf
 from app.api.auth_router import router as auth_router
 from app.api.settings_router import router as settings_router
 from app.api.settings_router import _get_or_create_settings
@@ -122,6 +123,51 @@ def get_session(
             for snap in snapshots
         ],
     }
+
+
+@app.get("/api/sessions/{session_id}/report")
+def download_session_report(
+    session_id: int,
+    db: DBSession = Depends(get_db),
+    current_user: db_models.User = Depends(get_current_user),
+):
+    session = (
+        db.query(db_models.Session)
+        .filter(db_models.Session.id == session_id, db_models.Session.user_id == current_user.id)
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    counts = db.query(db_models.VehicleCount).filter(db_models.VehicleCount.session_id == session_id).all()
+    counts_by_class = {c.class_name: c.count for c in counts}
+
+    snapshots = (
+        db.query(db_models.FrameSnapshot)
+        .filter(db_models.FrameSnapshot.session_id == session_id)
+        .order_by(db_models.FrameSnapshot.frame_index)
+        .all()
+    )
+    trend = [
+        {
+            "frame_index": snap.frame_index,
+            "active_vehicles": snap.active_vehicles,
+            "avg_active_vehicles": snap.avg_active_vehicles,
+            "density_level": snap.density_level,
+        }
+        for snap in snapshots
+    ]
+
+    pdf_bytes = generate_session_report_pdf(
+        session, counts_by_class, trend, current_user.full_name, current_user.email
+    )
+
+    filename = f"traffic_report_{session.video_id.rsplit('.', 1)[0]}_{session.id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.websocket("/ws/analytics/{video_id}")
