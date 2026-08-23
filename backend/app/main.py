@@ -18,6 +18,7 @@ from app.core.report_generator import generate_session_report_pdf
 from app.api.auth_router import router as auth_router
 from app.api.settings_router import router as settings_router
 from app.api.settings_router import _get_or_create_settings
+from app.api.analytics_router import router as analytics_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -32,6 +33,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(settings_router)
+app.include_router(analytics_router)
 
 AVATAR_DIR = "uploaded_avatars"
 os.makedirs(AVATAR_DIR, exist_ok=True)

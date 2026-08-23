@@ -9,6 +9,7 @@ import { Footer } from './components/Footer';
 import { LandingView } from './components/LandingView';
 import { DashboardView } from './components/DashboardView';
 import { ReportsView } from './components/ReportsView';
+import { AnalyticsView } from './components/AnalyticsView';
 import { HistoryView } from './components/HistoryView';
 import { SettingsView } from './components/SettingsView';
 import { AboutView } from './components/AboutView';
@@ -194,9 +195,9 @@ function AppShell() {
               onOpenUploadModal={() => setIsUploadModalOpen(true)}
             />
           )}
-          {activeTab === 'reports' && <ReportsView />}
+           {activeTab === 'reports' && <ReportsView />}
           {activeTab === 'history' && <HistoryView />}
-          {activeTab === 'analytics' && <ReportsView />}
+          {activeTab === 'analytics' && <AnalyticsView />}
            {activeTab === 'settings' && <SettingsView />}
           {activeTab === 'about' && <AboutView />}
           {activeTab === 'profile' && (
