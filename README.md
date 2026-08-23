@@ -10,7 +10,7 @@
 ![JWT](https://img.shields.io/badge/Auth-JWT-black?logo=jsonwebtokens&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-**AI-powered traffic video analysis: detect, track, count, and classify vehicles, estimate real-time traffic density, and visualize it all on a live analytics dashboard — secured behind real, backend-enforced user authentication.**
+**AI-powered traffic video analysis: detect, track, count, and classify vehicles, estimate real-time traffic density, and visualize it all on a live analytics dashboard — secured behind real, backend-enforced user authentication, with per-account configuration and profiles.**
 
 Built as a college mini project combining **Computer Vision**, **AI**, **Web Development**, and **Data Visualization**.
 
@@ -35,7 +35,7 @@ Built as a college mini project combining **Computer Vision**, **AI**, **Web Dev
 
 ## 🧭 Overview
 
-Traditional traffic monitoring relies on manual counting or expensive dedicated hardware (inductive loops, radar), neither of which scales or gives vehicle-type-level insight. **AI Traffic Analyzer** turns any uploaded video into structured traffic data using a pretrained YOLO model, tracks vehicles across frames to avoid double-counting, classifies them by type, estimates congestion, and streams the results to a web dashboard in real time — behind a real login system, with every session tied to the account that ran it.
+Traditional traffic monitoring relies on manual counting or expensive dedicated hardware (inductive loops, radar), neither of which scales or gives vehicle-type-level insight. **AI Traffic Analyzer** turns any uploaded video into structured traffic data using a pretrained YOLO model, tracks vehicles across frames to avoid double-counting, classifies them by type, estimates congestion, and streams the results to a web dashboard in real time — behind a real login system, with every session, setting, and profile tied to the account that owns it.
 
 ## ✨ Features
 
@@ -47,6 +47,9 @@ Traditional traffic monitoring relies on manual counting or expensive dedicated 
 - 🗄️ **Persistent History** — every session is saved to a database, scoped to its owner, and browsable afterward with full trend data
 - 📊 **Live Dashboard** — video preview, live stat cards, and charts, all fed from the real pipeline
 - 🔐 **Real Authentication** — registration, login, JWT access + refresh tokens, and email-based password reset, all enforced server-side
+- ⚙️ **Per-User Settings** — density thresholds, counting line position, smoothing window, and detection sensitivity are all editable and actually drive the pipeline on your next run
+- 📧 **Live Density Alerts** — optionally get emailed the moment a session reaches Heavy congestion
+- 👤 **Real Profiles** — editable name/email, secure password change, real lifetime stats computed from your session history, and photo upload
 
 ## 🛠️ Tech Stack
 
@@ -55,9 +58,10 @@ Traditional traffic monitoring relies on manual counting or expensive dedicated 
 | 🧠 Computer Vision | Ultralytics YOLO (YOLOv8 / YOLO26) + OpenCV |
 | 🎯 Tracking | ByteTrack (via Ultralytics `model.track()`) |
 | ⚙️ Backend | Python, FastAPI, WebSockets |
-| 🔐 Auth | JWT (access + refresh tokens), bcrypt password hashing, Gmail SMTP for reset emails |
+| 🔐 Auth | JWT (access + refresh tokens), bcrypt password hashing, Gmail SMTP for reset/alert emails |
 | 🎨 Frontend | React + TypeScript, Vite, Tailwind CSS v4 |
 | 🗄️ Database | SQLite via SQLAlchemy |
+| 🖼️ File Storage | FastAPI static file serving (avatars), local disk (videos) |
 | 🚀 Deployment (planned) | Docker |
 
 ## 🔄 System Pipeline
@@ -71,7 +75,10 @@ flowchart TD
     E --> F[⚡ Authenticated WebSocket Streaming]
     F --> G[📊 Live Dashboard]
     F --> H[🗄️ SQLite Persistence, per user]
+    F --> J[📧 Heavy-density email alert, if enabled]
     H --> I[📜 History and Trends]
+    K[⚙️ Per-User Settings] --> E
+    K --> D
 ```
 
 ## 🔐 Authentication
@@ -95,7 +102,7 @@ flowchart LR
 - Passwords are hashed with **bcrypt**, never stored or logged in plain text.
 - Access tokens expire in 30 minutes; the frontend automatically refreshes them using the longer-lived refresh token, so an active user is never unexpectedly logged out mid-session.
 - Password reset links are single-use, expire after 30 minutes, and are sent via real email (Gmail SMTP), not just simulated.
-- All video upload, analytics streaming, and session-history endpoints require a valid token — every user only ever sees their **own** analysis history.
+- All video upload, analytics streaming, and session-history endpoints require a valid token — every user only ever sees their **own** analysis history, settings, and profile.
 
 ## 📁 Project Structure
 
@@ -104,29 +111,32 @@ AI_Traffic_Analyzer/
 ├── backend/
 │   ├── .env                        # SECRET_KEY, SMTP credentials (never committed)
 │   └── app/
-│       ├── main.py                 # FastAPI app, routes, authenticated WebSocket
+│       ├── main.py                 # FastAPI app, routes, authenticated WebSocket, avatar static mount
 │       ├── api/
-│       │   └── auth_router.py      # register / login / refresh / forgot / reset
+│       │   ├── auth_router.py      # register / login / refresh / forgot / reset / profile / avatar
+│       │   └── settings_router.py  # GET/PUT per-user pipeline settings
 │       ├── schemas/
-│       │   └── auth_schemas.py     # Pydantic request/response models
+│       │   ├── auth_schemas.py     # Auth + profile request/response models
+│       │   └── settings_schemas.py # Settings request/response models
 │       └── core/
-│           ├── pipeline.py         # Detection + tracking + counting + density
+│           ├── pipeline.py         # Detection + tracking + counting + density (settings-driven)
 │           ├── database.py         # SQLAlchemy engine/session setup
-│           ├── db_models.py        # User, Session, FrameSnapshot, VehicleCount
+│           ├── db_models.py        # User, UserSettings, Session, FrameSnapshot, VehicleCount
 │           ├── security.py         # bcrypt hashing, JWT creation/verification
 │           ├── dependencies.py     # get_current_user route guard
-│           ├── email_service.py    # SMTP password-reset emails
+│           ├── email_service.py    # SMTP password-reset + density-alert emails
 │           └── config.py           # env-based settings
 ├── frontend/
 │   └── src/
 │       ├── App.tsx                 # Root app shell, auth-aware routing
 │       ├── contexts/
-│       │   └── AuthContext.tsx     # Global auth state, session restore
+│       │   └── AuthContext.tsx     # Global auth state, session restore, profile/avatar updates
 │       ├── hooks/
 │       │   └── useAnalyticsSocket.ts
 │       ├── services/
 │       │   ├── api.ts              # Authenticated REST calls + auto token refresh
-│       │   ├── authApi.ts          # Raw auth API calls
+│       │   ├── authApi.ts          # Auth, profile, password, avatar calls
+│       │   ├── settingsApi.ts      # Settings GET/PUT calls
 │       │   └── tokenStorage.ts     # Token persistence
 │       └── components/
 │           ├── LandingView.tsx
@@ -137,8 +147,8 @@ AI_Traffic_Analyzer/
 │           ├── DashboardView.tsx
 │           ├── ReportsView.tsx
 │           ├── HistoryView.tsx
-│           ├── SettingsView.tsx
-│           ├── ProfileView.tsx
+│           ├── SettingsView.tsx     # Real, backend-connected pipeline settings
+│           ├── ProfileView.tsx      # Real editing, password change, stats, photo upload
 │           ├── AboutView.tsx
 │           └── UploadModal.tsx
 ├── database/                       # SQLite file lives here at runtime
@@ -151,7 +161,7 @@ AI_Traffic_Analyzer/
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
-- A Gmail account with an [App Password](https://myaccount.google.com/apppasswords) (for password reset emails)
+- A Gmail account with an [App Password](https://myaccount.google.com/apppasswords) (for password reset and density alert emails)
 - (Optional) NVIDIA GPU + CUDA for faster inference
 
 ### Clone the repository
@@ -199,8 +209,8 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | 📊 Dashboard | Live analysis — upload a video and watch real-time detection, tracking, and density stats | ✅ Live |
 | 📄 Reports | Detailed session report view | 🚧 UI only |
 | 📜 History | Browse and review past analysis sessions, scoped to your account | ✅ Live |
-| ⚙️ Settings | Configure density thresholds, counting line, and other pipeline parameters | 🚧 UI only |
-| 👤 Profile | User account details | 🚧 UI only |
+| ⚙️ Settings | Configure density thresholds, counting line, smoothing, and detection sensitivity — saved per account | ✅ Live |
+| 👤 Profile | Edit name/email, change password, real lifetime stats, upload a profile photo | ✅ Live |
 | ℹ️ About | Project explanation, pipeline diagram, and tech stack credits | ✅ Live |
 
 ---
@@ -229,7 +239,13 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | Forgot / reset password via real email | ✅ Done |
 | Per-user session ownership (sessions scoped to account) | ✅ Done |
 | Authenticated WebSocket (token-verified handshake) | ✅ Done |
-| Settings values connected to backend config | ❌ Not started |
+| Per-user settings stored and actually driving the pipeline | ✅ Done |
+| Real-time YOLO confidence tuning (detection sensitivity) | ✅ Done |
+| Heavy-density email alerts | ✅ Done |
+| Profile editing (name/email) endpoint | ✅ Done |
+| Secure password change (current-password verified) | ✅ Done |
+| Real lifetime stats (videos analyzed, vehicles counted) | ✅ Done |
+| Profile photo upload + static serving | ✅ Done |
 
 ### Phase 8: Frontend
 | Task | Status |
@@ -244,8 +260,9 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | Forgot / Reset Password pages (real, functional) | ✅ Done |
 | Auto token refresh on expiry | ✅ Done |
 | Protected routes (redirect unauthenticated users) | ✅ Done |
-| Settings page (functional, saved to backend) | ❌ Not started (UI only) |
-| Profile page (editable, saved to backend) | ❌ Not started (UI only) |
+| Settings page (functional, saved to backend) | ✅ Done |
+| Profile page (editable, saved to backend) | ✅ Done |
+| Profile photo upload UI | ✅ Done |
 | Reports page with real PDF export | ❌ Not started |
 
 ### Deployment & Extras
@@ -266,9 +283,9 @@ Detection uses YOLO pretrained on COCO out of the box — no training required t
 
 - Vehicle classification can flicker between similar classes (e.g. truck vs. bus) on lightweight models like `yolov8n` — resolved for counting purposes via majority-vote classification per track ID.
 - ByteTrack can occasionally lose and re-acquire a vehicle mid-frame ("ID switch"), which the line-crossing counter naturally filters out in most cases.
-- Density thresholds are currently hardcoded per deployment and not yet tunable from the Settings UI.
-- Profile and Settings pages are UI-complete but not yet wired to persist changes to the backend.
-- Password reset requires a real Gmail App Password to be configured — without it, the "Forgot Password" flow will fail at the email-sending step.
+- The Reports page is UI-complete but not yet wired to generate a real PDF export.
+- Password reset and density-alert emails require a real Gmail App Password to be configured — without it, those flows fail at the email-sending step.
+- Profile photos are stored on local disk, not cloud storage — fine for a single-instance deployment, but wouldn't survive a container redeploy without a persistent volume.
 
 ## 📄 License
 
