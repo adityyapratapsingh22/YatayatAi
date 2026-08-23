@@ -10,7 +10,7 @@
 ![JWT](https://img.shields.io/badge/Auth-JWT-black?logo=jsonwebtokens&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-**AI-powered traffic video analysis: detect, track, count, and classify vehicles, estimate real-time traffic density, and visualize it all on a live analytics dashboard — secured behind real, backend-enforced user authentication, with per-account configuration and profiles.**
+**AI-powered traffic video analysis: detect, track, count, and classify vehicles, estimate real-time traffic density, and visualize it all on a live analytics dashboard — secured behind real, backend-enforced user authentication, with per-account configuration, profiles, and downloadable PDF reports.**
 
 Built as a college mini project combining **Computer Vision**, **AI**, **Web Development**, and **Data Visualization**.
 
@@ -35,7 +35,7 @@ Built as a college mini project combining **Computer Vision**, **AI**, **Web Dev
 
 ## 🧭 Overview
 
-Traditional traffic monitoring relies on manual counting or expensive dedicated hardware (inductive loops, radar), neither of which scales or gives vehicle-type-level insight. **AI Traffic Analyzer** turns any uploaded video into structured traffic data using a pretrained YOLO model, tracks vehicles across frames to avoid double-counting, classifies them by type, estimates congestion, and streams the results to a web dashboard in real time — behind a real login system, with every session, setting, and profile tied to the account that owns it.
+Traditional traffic monitoring relies on manual counting or expensive dedicated hardware (inductive loops, radar), neither of which scales or gives vehicle-type-level insight. **AI Traffic Analyzer** turns any uploaded video into structured traffic data using a pretrained YOLO model, tracks vehicles across frames to avoid double-counting, classifies them by type, estimates congestion, and streams the results to a web dashboard in real time — behind a real login system, with every session, setting, profile, and report tied to the account that owns it.
 
 ## ✨ Features
 
@@ -50,6 +50,7 @@ Traditional traffic monitoring relies on manual counting or expensive dedicated 
 - ⚙️ **Per-User Settings** — density thresholds, counting line position, smoothing window, and detection sensitivity are all editable and actually drive the pipeline on your next run
 - 📧 **Live Density Alerts** — optionally get emailed the moment a session reaches Heavy congestion
 - 👤 **Real Profiles** — editable name/email, secure password change, real lifetime stats computed from your session history, and photo upload
+- 📄 **PDF Reports** — server-generated, professionally formatted PDF for any completed session, with a real embedded trend chart and per-class breakdown table
 
 ## 🛠️ Tech Stack
 
@@ -59,6 +60,7 @@ Traditional traffic monitoring relies on manual counting or expensive dedicated 
 | 🎯 Tracking | ByteTrack (via Ultralytics `model.track()`) |
 | ⚙️ Backend | Python, FastAPI, WebSockets |
 | 🔐 Auth | JWT (access + refresh tokens), bcrypt password hashing, Gmail SMTP for reset/alert emails |
+| 📄 Reporting | ReportLab (PDF layout) + Matplotlib (chart rendering) |
 | 🎨 Frontend | React + TypeScript, Vite, Tailwind CSS v4 |
 | 🗄️ Database | SQLite via SQLAlchemy |
 | 🖼️ File Storage | FastAPI static file serving (avatars), local disk (videos) |
@@ -77,6 +79,7 @@ flowchart TD
     F --> H[🗄️ SQLite Persistence, per user]
     F --> J[📧 Heavy-density email alert, if enabled]
     H --> I[📜 History and Trends]
+    H --> L[📄 On-demand PDF Report]
     K[⚙️ Per-User Settings] --> E
     K --> D
 ```
@@ -102,7 +105,7 @@ flowchart LR
 - Passwords are hashed with **bcrypt**, never stored or logged in plain text.
 - Access tokens expire in 30 minutes; the frontend automatically refreshes them using the longer-lived refresh token, so an active user is never unexpectedly logged out mid-session.
 - Password reset links are single-use, expire after 30 minutes, and are sent via real email (Gmail SMTP), not just simulated.
-- All video upload, analytics streaming, and session-history endpoints require a valid token — every user only ever sees their **own** analysis history, settings, and profile.
+- All video upload, analytics streaming, session-history, and report-download endpoints require a valid token — every user only ever sees their **own** analysis history, settings, profile, and reports.
 
 ## 📁 Project Structure
 
@@ -111,7 +114,7 @@ AI_Traffic_Analyzer/
 ├── backend/
 │   ├── .env                        # SECRET_KEY, SMTP credentials (never committed)
 │   └── app/
-│       ├── main.py                 # FastAPI app, routes, authenticated WebSocket, avatar static mount
+│       ├── main.py                 # FastAPI app, routes, authenticated WebSocket, PDF endpoint
 │       ├── api/
 │       │   ├── auth_router.py      # register / login / refresh / forgot / reset / profile / avatar
 │       │   └── settings_router.py  # GET/PUT per-user pipeline settings
@@ -125,6 +128,7 @@ AI_Traffic_Analyzer/
 │           ├── security.py         # bcrypt hashing, JWT creation/verification
 │           ├── dependencies.py     # get_current_user route guard
 │           ├── email_service.py    # SMTP password-reset + density-alert emails
+│           ├── report_generator.py # PDF report generation (ReportLab + Matplotlib)
 │           └── config.py           # env-based settings
 ├── frontend/
 │   └── src/
@@ -134,7 +138,7 @@ AI_Traffic_Analyzer/
 │       ├── hooks/
 │       │   └── useAnalyticsSocket.ts
 │       ├── services/
-│       │   ├── api.ts              # Authenticated REST calls + auto token refresh
+│       │   ├── api.ts              # Authenticated REST calls, auto token refresh, PDF download
 │       │   ├── authApi.ts          # Auth, profile, password, avatar calls
 │       │   ├── settingsApi.ts      # Settings GET/PUT calls
 │       │   └── tokenStorage.ts     # Token persistence
@@ -145,7 +149,7 @@ AI_Traffic_Analyzer/
 │           ├── ForgotPasswordView.tsx
 │           ├── ResetPasswordView.tsx
 │           ├── DashboardView.tsx
-│           ├── ReportsView.tsx
+│           ├── ReportsView.tsx      # Real session list + PDF download
 │           ├── HistoryView.tsx
 │           ├── SettingsView.tsx     # Real, backend-connected pipeline settings
 │           ├── ProfileView.tsx      # Real editing, password change, stats, photo upload
@@ -175,7 +179,7 @@ cd AI_Traffic_Analyzer
 cd backend
 python -m venv venv
 venv\Scripts\Activate.ps1      # Windows PowerShell
-pip install ultralytics opencv-python fastapi "uvicorn[standard]" python-multipart websockets sqlalchemy "passlib[bcrypt]" "python-jose[cryptography]" python-dotenv "pydantic[email]"
+pip install ultralytics opencv-python fastapi "uvicorn[standard]" python-multipart websockets sqlalchemy "passlib[bcrypt]" "python-jose[cryptography]" python-dotenv "pydantic[email]" reportlab matplotlib
 
 # Copy .env.example to .env and fill in your SECRET_KEY and Gmail SMTP credentials
 copy .env.example .env
@@ -207,7 +211,7 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | 🔑 Forgot Password | Request a real emailed reset link | ✅ Live |
 | 🔓 Reset Password | Set a new password via the emailed token | ✅ Live |
 | 📊 Dashboard | Live analysis — upload a video and watch real-time detection, tracking, and density stats | ✅ Live |
-| 📄 Reports | Detailed session report view | 🚧 UI only |
+| 📄 Reports | Real session list with genuine, downloadable PDF reports | ✅ Live |
 | 📜 History | Browse and review past analysis sessions, scoped to your account | ✅ Live |
 | ⚙️ Settings | Configure density thresholds, counting line, smoothing, and detection sensitivity — saved per account | ✅ Live |
 | 👤 Profile | Edit name/email, change password, real lifetime stats, upload a profile photo | ✅ Live |
@@ -246,6 +250,7 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | Secure password change (current-password verified) | ✅ Done |
 | Real lifetime stats (videos analyzed, vehicles counted) | ✅ Done |
 | Profile photo upload + static serving | ✅ Done |
+| Server-generated PDF reports (chart + tables) | ✅ Done |
 
 ### Phase 8: Frontend
 | Task | Status |
@@ -263,7 +268,7 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | Settings page (functional, saved to backend) | ✅ Done |
 | Profile page (editable, saved to backend) | ✅ Done |
 | Profile photo upload UI | ✅ Done |
-| Reports page with real PDF export | ❌ Not started |
+| Reports page with real PDF export | ✅ Done |
 
 ### Deployment & Extras
 | Task | Status |
@@ -283,7 +288,7 @@ Detection uses YOLO pretrained on COCO out of the box — no training required t
 
 - Vehicle classification can flicker between similar classes (e.g. truck vs. bus) on lightweight models like `yolov8n` — resolved for counting purposes via majority-vote classification per track ID.
 - ByteTrack can occasionally lose and re-acquire a vehicle mid-frame ("ID switch"), which the line-crossing counter naturally filters out in most cases.
-- The Reports page is UI-complete but not yet wired to generate a real PDF export.
+- PDF reports can only be generated for sessions that have finished processing (`ended_at` is set) — an in-progress session's report button is disabled by design.
 - Password reset and density-alert emails require a real Gmail App Password to be configured — without it, those flows fail at the email-sending step.
 - Profile photos are stored on local disk, not cloud storage — fine for a single-instance deployment, but wouldn't survive a container redeploy without a persistent volume.
 
