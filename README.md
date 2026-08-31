@@ -27,6 +27,7 @@ Built as a college mini project combining **Computer Vision**, **AI**, **Web Dev
 - [Getting Started](#-getting-started)
 - [Application Pages](#️-application-pages)
 - [Project Task Tracker](#-project-task-tracker)
+- [Quality Assurance & Bug Fixes](#-quality-assurance--bug-fixes)
 - [Dataset Notes](#-dataset-notes)
 - [Known Limitations](#️-known-limitations)
 - [License](#-license)
@@ -39,17 +40,17 @@ Traditional traffic monitoring relies on manual counting or expensive dedicated 
 
 ## ✨ Features
 
-- 🚗 **Vehicle Detection** — pretrained YOLO model detects car, bus, truck, motorcycle, and bicycle per frame
+- 🚗 **Vehicle Detection** — pretrained YOLO model detects car, bus, truck, motorcycle, and bicycle per frame, with a strict class filter that excludes pedestrians and every other non-vehicle COCO class from all counts
 - 🎯 **Multi-Object Tracking** — ByteTrack assigns each vehicle a persistent ID across frames
 - 📏 **Line-Crossing Counting** — accurate one-time counts per vehicle, broken down by class
 - 🌡️ **Density Estimation** — live congestion level (Light / Moderate / Heavy), smoothed over a rolling window
 - ⚡ **Real-Time Streaming** — live analytics pushed to the browser over an authenticated WebSocket as the video is processed
 - 🗄️ **Persistent History** — every session is saved to a database, scoped to its owner, searchable and filterable, with full trend data and both CSV and PDF export per session
 - 📊 **Live Dashboard** — video preview, live stat cards, and charts, all fed from the real pipeline
-- 🔐 **Real Authentication** — registration, login, JWT access + refresh tokens, and email-based password reset, all enforced server-side
+- 🔐 **Real Authentication** — registration, login, JWT access + refresh tokens (with consistent auto-refresh across every part of the app), and email-based password reset, all enforced server-side
 - ⚙️ **Per-User Settings** — density thresholds, counting line position, smoothing window, and detection sensitivity are all editable and actually drive the pipeline on your next run
 - 📧 **Live Density Alerts** — optionally get emailed the moment a session reaches Heavy congestion
-- 👤 **Real Profiles** — editable name/email, secure password change, real lifetime stats computed from your session history, and photo upload
+- 👤 **Real Profiles** — editable name/email, secure password change, real lifetime stats computed from your session history, and photo upload with correct cache invalidation
 - 📄 **PDF Reports** — server-generated, professionally formatted PDF for any completed session, with a real embedded trend chart and per-class breakdown table
 - 📈 **Aggregate Analytics** — cross-session insights computed server-side: total vehicles ever counted, density distribution, all-time vehicle-type breakdown, busiest session, and day-by-day activity trend
 
@@ -73,7 +74,8 @@ Traditional traffic monitoring relies on manual counting or expensive dedicated 
 ```mermaid
 flowchart TD
     A[🎥 Video Input] --> B[🧠 Vehicle Detection - YOLO]
-    B --> C[🎯 Object Tracking - ByteTrack]
+    B --> B2[🚫 Non-vehicle classes filtered out]
+    B2 --> C[🎯 Object Tracking - ByteTrack]
     C --> D[📏 Counting and Classification]
     D --> E[🌡️ Density Estimation]
     E --> F[⚡ Authenticated WebSocket Streaming]
@@ -106,7 +108,7 @@ flowchart LR
 ```
 
 - Passwords are hashed with **bcrypt**, never stored or logged in plain text.
-- Access tokens expire in 30 minutes; the frontend automatically refreshes them using the longer-lived refresh token, so an active user is never unexpectedly logged out mid-session.
+- Access tokens expire in 30 minutes; a shared `httpClient` used by every API service file automatically refreshes them using the longer-lived refresh token, so an active user is never unexpectedly logged out mid-session — including on the Profile page, where this previously did not work correctly (see Quality Assurance section).
 - Password reset links are single-use, expire after 30 minutes, and are sent via real email (Gmail SMTP), not just simulated.
 - All video upload, analytics streaming, session-history, report, and analytics endpoints require a valid token — every user only ever sees their **own** analysis history, settings, profile, reports, and aggregate stats.
 
@@ -127,14 +129,14 @@ AI_Traffic_Analyzer/
 │       │   ├── settings_schemas.py # Settings request/response models
 │       │   └── analytics_schemas.py# Analytics summary response models
 │       └── core/
-│           ├── pipeline.py         # Detection + tracking + counting + density (settings-driven)
+│           ├── pipeline.py         # Detection + tracking + counting + density (vehicle-class filtered)
 │           ├── database.py         # SQLAlchemy engine/session setup
 │           ├── db_models.py        # User, UserSettings, Session, FrameSnapshot, VehicleCount
 │           ├── security.py         # bcrypt hashing, JWT creation/verification
 │           ├── dependencies.py     # get_current_user route guard
 │           ├── email_service.py    # SMTP password-reset + density-alert emails
 │           ├── report_generator.py # PDF report generation (ReportLab + Matplotlib)
-│           └── config.py           # env-based settings
+│           └── config.py           # env-based settings, shared directory constants
 ├── frontend/
 │   └── src/
 │       ├── App.tsx                 # Root app shell, auth-aware routing
@@ -143,7 +145,8 @@ AI_Traffic_Analyzer/
 │       ├── hooks/
 │       │   └── useAnalyticsSocket.ts
 │       ├── services/
-│       │   ├── api.ts              # Authenticated REST calls, auto token refresh, PDF download
+│       │   ├── httpClient.ts       # Single shared authFetch + token-refresh implementation
+│       │   ├── api.ts              # Session, upload, and PDF download calls
 │       │   ├── authApi.ts          # Auth, profile, password, avatar calls
 │       │   ├── settingsApi.ts      # Settings GET/PUT calls
 │       │   ├── analyticsApi.ts     # Aggregate analytics summary call
@@ -220,7 +223,7 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | 📊 Dashboard | Live analysis — upload a video and watch real-time detection, tracking, and density stats | ✅ Live |
 | 📄 Reports | Real session list with genuine, downloadable PDF reports | ✅ Live |
 | 📜 History | Searchable, filterable archive of real sessions, with CSV and PDF export per session | ✅ Live |
-| 📈 Analytics | Aggregate insights across your entire session history (previously a duplicate of Reports — now a real, distinct page) | ✅ Live |
+| 📈 Analytics | Aggregate insights across your entire session history | ✅ Live |
 | ⚙️ Settings | Configure density thresholds, counting line, smoothing, and detection sensitivity — saved per account | ✅ Live |
 | 👤 Profile | Edit name/email, change password, real lifetime stats, upload a profile photo | ✅ Live |
 | ℹ️ About | Project explanation, pipeline diagram, and tech stack credits | ✅ Live |
@@ -238,6 +241,7 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | ID-switch / class-flicker noise filtering | ✅ Done |
 | Line-crossing vehicle counting | ✅ Done |
 | Traffic density estimation | ✅ Done |
+| Vehicle-only class filtering (excludes pedestrians etc.) | ✅ Done |
 
 ### Phase 6–7: Backend
 | Task | Status |
@@ -260,6 +264,7 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | Profile photo upload + static serving | ✅ Done |
 | Server-generated PDF reports (chart + tables) | ✅ Done |
 | Aggregate analytics endpoint (SQL GROUP BY across sessions) | ✅ Done |
+| WebSocket error handling (clean failure messages, server-side logging) | ✅ Done |
 
 ### Phase 8: Frontend
 | Task | Status |
@@ -272,10 +277,10 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | Login page (real, functional) | ✅ Done |
 | Register page (real, functional) | ✅ Done |
 | Forgot / Reset Password pages (real, functional) | ✅ Done |
-| Auto token refresh on expiry | ✅ Done |
+| Auto token refresh on expiry (consistent across all pages) | ✅ Done |
 | Protected routes (redirect unauthenticated users) | ✅ Done |
 | Settings page (functional, saved to backend) | ✅ Done |
-| Profile page (editable, saved to backend) | ✅ Done |
+| Profile page (editable, saved to backend, correct photo cache-busting) | ✅ Done |
 | Profile photo upload UI | ✅ Done |
 | Reports page with real PDF export | ✅ Done |
 | Analytics page (real, distinct from Reports) | ✅ Done |
@@ -290,6 +295,24 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 
 ---
 
+## 🔧 Quality Assurance & Bug Fixes
+
+A deliberate audit pass was done before deployment work began, plus one bug caught via independent third-party review (ChatGPT was asked to compare a generated report against the source video). Documented here for transparency:
+
+| Issue | Severity | Fix |
+|---|---|---|
+| **Pedestrians counted as vehicles** — YOLO's default model detects 80 COCO classes, not just vehicles. `person`, `stop sign`, and every other non-vehicle class were being tracked and counted alongside real vehicles, inflating every count. | 🔴 Critical | Added an explicit `VEHICLE_CLASSES` allowlist in `pipeline.py`; only `car`, `truck`, `bus`, `motorcycle`, `bicycle` are now tracked or counted. |
+| Token auto-refresh was inconsistent — implemented in 3 of 4 API service files, missing from `authApi.ts` (Profile/password/avatar calls) | 🟠 Bug | Centralized all token-refresh logic into one shared `httpClient.ts`, used by every service file identically. |
+| Profile photo could show stale cached image after re-upload | 🟡 Bug | Added an `avatarVersion` counter that busts the image cache on every successful upload. |
+| A pipeline crash mid-analysis (corrupt file, model error) failed silently with no message to the user | 🟠 Robustness | WebSocket handler now catches unexpected exceptions, logs them server-side, and sends a clean error message to the client. |
+| A failed density-alert email (bad SMTP credentials) would fail silently with no record | 🟡 Robustness | Wrapped in a logged, error-handled function instead of a bare fire-and-forget task. |
+| Fake "Deploy Model" button/modal (fictional edge-deployment simulation) | 🟢 Cleanup | Removed entirely. |
+| Fake hardcoded notification alerts | 🟢 Cleanup | Replaced with an honest empty state. |
+| Non-functional "Search Nodes" search bar | 🟢 Cleanup | Removed. |
+| Duplicate `AVATAR_DIR` constant defined in two files | 🟢 Cleanup | Consolidated into one shared setting in `config.py`. |
+
+**Note:** the vehicle-classification fix only affects analyses run *after* the fix — any session recorded before it may have inflated counts from nearby pedestrians. Clearing the database for a fresh start is recommended before any formal accuracy evaluation.
+
 ## 📊 Dataset Notes
 
 Detection uses YOLO pretrained on COCO out of the box — no training required to get started, since it already covers `car`, `truck`, `bus`, `motorcycle`, and `bicycle`. For improved accuracy on regional traffic (e.g. auto-rickshaws, mixed lane discipline), fine-tuning on **IDD (India Driving Dataset)** or **UA-DETRAC** is recommended.
@@ -298,10 +321,10 @@ Detection uses YOLO pretrained on COCO out of the box — no training required t
 
 - Vehicle classification can flicker between similar classes (e.g. truck vs. bus) on lightweight models like `yolov8n` — resolved for counting purposes via majority-vote classification per track ID.
 - ByteTrack can occasionally lose and re-acquire a vehicle mid-frame ("ID switch"), which the line-crossing counter naturally filters out in most cases.
+- No formal accuracy evaluation has been performed (no mAP/precision-recall against a labeled ground-truth set) — accuracy claims are based on manual observation and testing, not benchmarked metrics.
 - PDF reports can only be generated for sessions that have finished processing (`ended_at` is set) — an in-progress session's report button is disabled by design.
 - Password reset and density-alert emails require a real Gmail App Password to be configured — without it, those flows fail at the email-sending step.
 - Profile photos are stored on local disk, not cloud storage — fine for a single-instance deployment, but wouldn't survive a container redeploy without a persistent volume.
-- Analytics' "Vehicles Counted Over Time" chart groups by calendar day — with only a few sessions run so far, it may show a single bar until usage spans multiple days.
 
 ## 📄 License
 
