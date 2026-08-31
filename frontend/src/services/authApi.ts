@@ -1,4 +1,4 @@
-import { getAccessToken } from './tokenStorage';
+import { authFetchJson } from './httpClient';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -21,7 +21,7 @@ export interface ProfileStats {
   member_since: string;
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
+async function handlePublicResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail: string = response.statusText;
     try {
@@ -35,10 +35,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
-function authHeaders(): HeadersInit {
-  const token = getAccessToken();
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-}
+// --- Public endpoints (no auth token needed/available yet) -- plain fetch ---
 
 export async function register(email: string, fullName: string, password: string): Promise<AuthUser> {
   const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
@@ -46,7 +43,7 @@ export async function register(email: string, fullName: string, password: string
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, full_name: fullName, password }),
   });
-  return handleResponse<AuthUser>(response);
+  return handlePublicResponse<AuthUser>(response);
 }
 
 export async function login(email: string, password: string): Promise<TokenPair> {
@@ -55,7 +52,7 @@ export async function login(email: string, password: string): Promise<TokenPair>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  return handleResponse<TokenPair>(response);
+  return handlePublicResponse<TokenPair>(response);
 }
 
 export async function refreshTokens(refreshToken: string): Promise<TokenPair> {
@@ -64,50 +61,7 @@ export async function refreshTokens(refreshToken: string): Promise<TokenPair> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh_token: refreshToken }),
   });
-  return handleResponse<TokenPair>(response);
-}
-
-export async function getMe(): Promise<AuthUser> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/me`, { headers: authHeaders() });
-  return handleResponse<AuthUser>(response);
-}
-
-export async function updateProfile(fullName: string, email: string): Promise<AuthUser> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-    method: 'PATCH',
-    headers: authHeaders(),
-    body: JSON.stringify({ full_name: fullName, email }),
-  });
-  return handleResponse<AuthUser>(response);
-}
-
-export async function uploadAvatar(file: File): Promise<AuthUser> {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  // Deliberately NOT using authHeaders() here -- it sets Content-Type: application/json,
-  // but FormData needs the browser to set its own multipart Content-Type with the
-  // correct boundary string, which fetch does automatically only if we don't override it.
-  const response = await fetch(`${API_BASE_URL}/api/auth/me/avatar`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
-    body: formData,
-  });
-  return handleResponse<AuthUser>(response);
-}
-
-export async function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
-  });
-  return handleResponse(response);
-}
-
-export async function getMyStats(): Promise<ProfileStats> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/me/stats`, { headers: authHeaders() });
-  return handleResponse<ProfileStats>(response);
+  return handlePublicResponse<TokenPair>(response);
 }
 
 export async function forgotPassword(email: string): Promise<{ message: string }> {
@@ -116,7 +70,7 @@ export async function forgotPassword(email: string): Promise<{ message: string }
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
-  return handleResponse(response);
+  return handlePublicResponse(response);
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
@@ -125,5 +79,44 @@ export async function resetPassword(token: string, newPassword: string): Promise
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, new_password: newPassword }),
   });
-  return handleResponse(response);
+  return handlePublicResponse(response);
+}
+
+// --- Protected endpoints -- use authFetch/authFetchJson, so these now correctly
+// auto-refresh an expired token instead of failing outright (the bug this fixes) ---
+
+export async function getMe(): Promise<AuthUser> {
+  return authFetchJson<AuthUser>(`${API_BASE_URL}/api/auth/me`);
+}
+
+export async function updateProfile(fullName: string, email: string): Promise<AuthUser> {
+  return authFetchJson<AuthUser>(`${API_BASE_URL}/api/auth/me`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ full_name: fullName, email }),
+  });
+}
+
+export async function uploadAvatar(file: File): Promise<AuthUser> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  // Deliberately not setting Content-Type -- the browser sets its own multipart
+  // boundary automatically when the body is a FormData object.
+  return authFetchJson<AuthUser>(`${API_BASE_URL}/api/auth/me/avatar`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  return authFetchJson(`${API_BASE_URL}/api/auth/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+export async function getMyStats(): Promise<ProfileStats> {
+  return authFetchJson<ProfileStats>(`${API_BASE_URL}/api/auth/me/stats`);
 }

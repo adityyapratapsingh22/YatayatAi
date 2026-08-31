@@ -21,6 +21,10 @@ class Settings:
     # Frontend URL, used to build the password reset link sent by email
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+    # Shared directory names, defined once so backend files don't duplicate the string
+    AVATAR_DIR: str = "uploaded_avatars"
+    UPLOAD_DIR: str = "uploaded_videos"
+
 
 settings = Settings()
 

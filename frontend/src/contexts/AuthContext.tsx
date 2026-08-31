@@ -7,6 +7,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  avatarVersion: number;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, fullName: string, password: string) => Promise<void>;
   logout: () => void;
@@ -21,6 +22,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Bumped on every successful avatar upload. The photo's URL/filename never actually
+  // changes on re-upload, so without this, browsers can keep showing a cached OLD photo
+  // after you upload a new one. Components append ?v={avatarVersion} to the image URL,
+  // which forces a fresh fetch each time this increments.
+  const [avatarVersion, setAvatarVersion] = useState(0);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -79,11 +85,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const uploadAvatar = useCallback(async (file: File) => {
     const updated = await authApi.uploadAvatar(file);
     setUser(updated);
+    setAvatarVersion((v) => v + 1);
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!user, isLoading, login, register, logout, forgotPassword, resetPassword, updateProfile, uploadAvatar }}
+      value={{ user, isAuthenticated: !!user, isLoading, avatarVersion, login, register, logout, forgotPassword, resetPassword, updateProfile, uploadAvatar }}
     >
       {children}
     </AuthContext.Provider>

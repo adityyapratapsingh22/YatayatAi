@@ -19,20 +19,15 @@ import { RegisterView } from './components/RegisterView';
 import { ForgotPasswordView } from './components/ForgotPasswordView';
 import { ResetPasswordView } from './components/ResetPasswordView';
 import { UploadModal } from './components/UploadModal';
-import { DeployModal } from './components/DeployModal';
-import { PdfExportModal } from './components/PdfExportModal';
-import { Check, Bell, X } from 'lucide-react';
+import { Check, Bell, X, BellOff } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const PROTECTED_TABS: NavTab[] = ['dashboard', 'reports', 'history', 'analytics', 'settings', 'profile'];
-const STANDALONE_TABS: NavTab[] = ['landing', 'login', 'register', 'forgot-password', 'reset-password'];
 
 function AppShell() {
-  const { isAuthenticated, isLoading, user, logout } = useAuth();
+  const { isAuthenticated, isLoading, user, logout, avatarVersion } = useAuth();
 
-  // Reads the initial tab and reset-password token straight from the URL on first load,
-  // so a link like http://localhost:3000/reset-password?token=xyz lands on the right page.
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
     if (window.location.pathname === '/reset-password') return 'reset-password';
     return 'landing';
@@ -45,9 +40,7 @@ function AppShell() {
   const { connected, latest, history, error: wsError, connect } = useAnalyticsSocket();
   const [previewFile, setPreviewFile] = useState<File | null>(null);
 
-  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -101,13 +94,19 @@ function AppShell() {
 
   if (activeTab === 'login') {
     return (
-      <LoginView onSuccessLogin={() => { showToast(`Welcome back, ${user?.full_name ?? ''}`); setActiveTab('dashboard'); }} onNavigate={navigate} />
+      <LoginView
+        onSuccessLogin={() => { showToast(`Welcome back, ${user?.full_name ?? ''}`); setActiveTab('dashboard'); }}
+        onNavigate={navigate}
+      />
     );
   }
 
   if (activeTab === 'register') {
     return (
-      <RegisterView onSuccessRegister={() => { showToast('Account created!'); setActiveTab('dashboard'); }} onNavigate={navigate} />
+      <RegisterView
+        onSuccessRegister={() => { showToast('Account created!'); setActiveTab('dashboard'); }}
+        onNavigate={navigate}
+      />
     );
   }
 
@@ -148,12 +147,15 @@ function AppShell() {
     }
   }
 
+  // Real photo (cache-busted) if uploaded, otherwise the default placeholder
   const displayUser: UserProfile = user
     ? {
         ...DEFAULT_USER_PROFILE,
         name: user.full_name,
         email: user.email,
-        avatarUrl: user.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : DEFAULT_USER_PROFILE.avatarUrl,
+        avatarUrl: user.avatar_url
+          ? `${API_BASE_URL}${user.avatar_url}?v=${avatarVersion}`
+          : DEFAULT_USER_PROFILE.avatarUrl,
       }
     : DEFAULT_USER_PROFILE;
 
@@ -163,12 +165,11 @@ function AppShell() {
         activeTab={activeTab}
         setActiveTab={navigate}
         user={displayUser}
-        onDeployClick={() => setIsDeployModalOpen(true)}
         onExportLiveClick={handleExportLiveData}
         onNotificationClick={() => setNotificationsOpen(!notificationsOpen)}
         onHelpClick={() => setActiveTab('about')}
         onLogout={handleLogout}
-        notificationsCount={2}
+        notificationsCount={0}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -176,12 +177,11 @@ function AppShell() {
           activeTab={activeTab}
           setActiveTab={navigate}
           user={displayUser}
-          onDeployClick={() => setIsDeployModalOpen(true)}
           onExportLiveClick={handleExportLiveData}
           onNotificationClick={() => setNotificationsOpen(!notificationsOpen)}
           onHelpClick={() => setActiveTab('about')}
           onLogout={handleLogout}
-          notificationsCount={2}
+          notificationsCount={0}
         />
 
         <main className="flex-1 pb-12">
@@ -195,14 +195,12 @@ function AppShell() {
               onOpenUploadModal={() => setIsUploadModalOpen(true)}
             />
           )}
-           {activeTab === 'reports' && <ReportsView />}
+          {activeTab === 'reports' && <ReportsView />}
           {activeTab === 'history' && <HistoryView />}
           {activeTab === 'analytics' && <AnalyticsView />}
-           {activeTab === 'settings' && <SettingsView />}
+          {activeTab === 'settings' && <SettingsView />}
           {activeTab === 'about' && <AboutView />}
-          {activeTab === 'profile' && (
-            <ProfileView user={displayUser} onUpdateUser={() => showToast('Profile updated!')} />
-          )}
+          {activeTab === 'profile' && <ProfileView />}
         </main>
 
         <Footer onNavClick={navigate} />
@@ -213,29 +211,23 @@ function AppShell() {
         onClose={() => setIsUploadModalOpen(false)}
         onAnalysisComplete={handleAnalysisComplete}
       />
-      <DeployModal isOpen={isDeployModalOpen} onClose={() => setIsDeployModalOpen(false)} />
-      <PdfExportModal isOpen={isPdfModalOpen} onClose={() => setIsPdfModalOpen(false)} />
 
       {notificationsOpen && (
         <div className="fixed top-16 right-4 z-50 w-80 bg-[#0e0e0e] rounded border border-white/15 shadow-2xl p-4 text-xs">
           <div className="flex items-center justify-between pb-2 mb-3 border-b border-white/10">
             <div className="flex items-center gap-2">
               <Bell className="w-3.5 h-3.5 text-white" />
-              <span className="font-semibold uppercase tracking-wider text-white">System Alerts (2)</span>
+              <span className="font-semibold uppercase tracking-wider text-white">Notifications</span>
             </div>
             <button onClick={() => setNotificationsOpen(false)} className="text-white/40 hover:text-white">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="flex flex-col gap-2.5">
-            <div className="p-2.5 bg-[#121212] rounded border border-rose-500/30">
-              <span className="text-rose-300 font-medium block mb-0.5">Critical Density Reached</span>
-              <p className="text-white/50 text-[11px]">A monitored session reported Heavy density.</p>
-            </div>
-            <div className="p-2.5 bg-[#121212] rounded border border-white/20">
-              <span className="text-white font-medium block mb-0.5">Backend Connected</span>
-              <p className="text-white/50 text-[11px]">WebSocket link to the analysis pipeline is active.</p>
-            </div>
+          <div className="flex flex-col items-center gap-2 py-6 text-white/30">
+            <BellOff className="w-6 h-6" />
+            <p className="text-[11px] text-center">
+              No notifications yet. Enable email alerts in Settings to get notified when a session reaches Heavy density.
+            </p>
           </div>
         </div>
       )}

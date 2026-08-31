@@ -1,6 +1,7 @@
 import os
 import shutil
 import asyncio
+import logging
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Depends, Query, HTTPException, Response
@@ -15,10 +16,14 @@ from app.core.dependencies import get_current_user
 from app.core.security import decode_token
 from app.core.email_service import send_density_alert_email
 from app.core.report_generator import generate_session_report_pdf
+from app.core.config import settings
 from app.api.auth_router import router as auth_router
 from app.api.settings_router import router as settings_router
 from app.api.settings_router import _get_or_create_settings
 from app.api.analytics_router import router as analytics_router
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ai_traffic_analyzer")
 
 Base.metadata.create_all(bind=engine)
 
@@ -35,14 +40,23 @@ app.include_router(auth_router)
 app.include_router(settings_router)
 app.include_router(analytics_router)
 
-AVATAR_DIR = "uploaded_avatars"
-os.makedirs(AVATAR_DIR, exist_ok=True)
-app.mount("/avatars", StaticFiles(directory=AVATAR_DIR), name="avatars")
+os.makedirs(settings.AVATAR_DIR, exist_ok=True)
+app.mount("/avatars", StaticFiles(directory=settings.AVATAR_DIR), name="avatars")
 
-UPLOAD_DIR = "uploaded_videos"
+UPLOAD_DIR = settings.UPLOAD_DIR
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 SNAPSHOT_EVERY_N_FRAMES = 15
+
+
+def _send_density_alert_safe(to_email: str, video_id: str, avg_active_vehicles: float):
+    """Wraps the SMTP call so a bad Gmail credential or network hiccup gets logged instead
+    of silently vanishing inside a fire-and-forget background task."""
+    try:
+        send_density_alert_email(to_email, video_id, avg_active_vehicles)
+        logger.info(f"Density alert email sent to {to_email} for session '{video_id}'")
+    except Exception:
+        logger.exception(f"Failed to send density alert email to {to_email} for session '{video_id}'")
 
 
 @app.get("/")
@@ -237,7 +251,7 @@ async def analytics_ws(websocket: WebSocket, video_id: str, token: str = Query(.
                 heavy_alert_sent = True
                 asyncio.create_task(
                     asyncio.to_thread(
-                        send_density_alert_email, user.email, video_id, update["avg_active_vehicles"]
+                        _send_density_alert_safe, user.email, video_id, update["avg_active_vehicles"]
                     )
                 )
 
@@ -265,7 +279,16 @@ async def analytics_ws(websocket: WebSocket, video_id: str, token: str = Query(.
         db.commit()
 
     except WebSocketDisconnect:
-        print(f"Client disconnected while processing {video_id}")
+        logger.info(f"Client disconnected while processing {video_id} (session {db_session.id})")
+    except Exception as exc:
+        # Anything unexpected during processing (corrupt video, YOLO failure, disk full, etc.)
+        # -- log the real error server-side, and try to tell the client something useful
+        # instead of the connection just going silent.
+        logger.exception(f"Pipeline failed for {video_id} (session {db_session.id})")
+        try:
+            await websocket.send_json({"error": f"Analysis failed: {str(exc)}"})
+        except Exception:
+            pass  # connection may already be closed; nothing more we can do
     finally:
         db.close()
         await websocket.close()

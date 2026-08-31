@@ -1,21 +1,19 @@
 import React from 'react';
 import { NavTab, UserProfile } from '../types';
-import { 
-  Radio, 
-  FileText, 
-  History as HistoryIcon, 
-  BarChart3, 
-  Settings as SettingsIcon, 
-  Info, 
-  Download, 
-  User, 
-  LogOut, 
-  Search, 
-  Bell, 
+import {
+  Radio,
+  FileText,
+  History as HistoryIcon,
+  BarChart3,
+  Settings as SettingsIcon,
+  Info,
+  Download,
+  User,
+  LogOut,
+  Bell,
   HelpCircle,
   Menu,
   X,
-  Sparkles,
   Camera
 } from 'lucide-react';
 
@@ -23,7 +21,6 @@ interface NavigationProps {
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
   user: UserProfile;
-  onDeployClick: () => void;
   onExportLiveClick: () => void;
   onNotificationClick: () => void;
   onHelpClick: () => void;
@@ -40,7 +37,7 @@ export const Sidebar: React.FC<NavigationProps> = ({
   return (
     <aside className="hidden md:flex flex-col h-screen sticky top-0 bg-[#0c0c0c] text-white/80 w-64 border-r border-white/10 shrink-0 select-none z-30">
       {/* Brand Header */}
-      <div 
+      <div
         onClick={() => setActiveTab('landing')}
         className="p-5 border-b border-white/10 flex items-center gap-3 cursor-pointer hover:bg-white/[0.03] transition-colors"
       >
@@ -172,21 +169,19 @@ export const TopNavbar: React.FC<NavigationProps> = ({
   activeTab,
   setActiveTab,
   user,
-  onDeployClick,
   onNotificationClick,
   onHelpClick,
   onLogout,
   notificationsCount,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState('');
 
   return (
     <>
       <nav className="h-16 w-full bg-[#080808]/90 backdrop-blur-md border-b border-white/10 sticky top-0 z-40 px-4 md:px-8 flex items-center justify-between">
         {/* Left: Brand & Links */}
         <div className="flex items-center gap-8">
-          <div 
+          <div
             onClick={() => setActiveTab('landing')}
             className="flex items-center gap-3 cursor-pointer group"
           >
@@ -232,6 +227,14 @@ export const TopNavbar: React.FC<NavigationProps> = ({
               History
             </button>
             <button
+              onClick={() => setActiveTab('analytics')}
+              className={`transition-colors py-1 ${
+                activeTab === 'analytics' ? 'text-white border-b border-white' : 'hover:text-white'
+              }`}
+            >
+              Analytics
+            </button>
+            <button
               onClick={() => setActiveTab('settings')}
               className={`transition-colors py-1 ${
                 activeTab === 'settings' ? 'text-white border-b border-white' : 'hover:text-white'
@@ -250,21 +253,8 @@ export const TopNavbar: React.FC<NavigationProps> = ({
           </div>
         </div>
 
-        {/* Right: Search, Deploy, Notifications, Avatar */}
+        {/* Right: Notifications, Help, Avatar */}
         <div className="flex items-center gap-3">
-          {/* Search bar */}
-          <div className="relative hidden sm:block">
-            <Search className="w-3.5 h-3.5 text-white/30 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="SEARCH NODES..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-[#121212] border border-white/10 rounded py-1.5 pl-8 pr-3 text-[11px] font-mono-data focus:outline-none focus:border-white/40 transition-all text-[#F0F0F0] placeholder-white/30 w-36 md:w-48 tracking-wider"
-            />
-          </div>
-
-          {/* Notifications */}
           <button
             onClick={onNotificationClick}
             className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded transition-colors relative"
@@ -276,26 +266,14 @@ export const TopNavbar: React.FC<NavigationProps> = ({
             )}
           </button>
 
-          {/* Help */}
           <button
             onClick={onHelpClick}
             className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded transition-colors hidden sm:block"
-            title="System Documentation"
+            title="Project Info"
           >
             <HelpCircle className="w-4 h-4" />
           </button>
 
-          {/* Deploy Model CTA */}
-          <button
-            onClick={onDeployClick}
-            className="border border-white/20 hover:bg-white hover:text-black text-white text-[10px] font-semibold uppercase tracking-widest px-3.5 py-1.5 rounded transition-all duration-200 flex items-center gap-1.5 active:scale-95"
-          >
-            <Sparkles className="w-3 h-3" />
-            <span className="hidden md:inline">Deploy Model</span>
-            <span className="md:hidden">Deploy</span>
-          </button>
-
-          {/* User Profile Avatar */}
           <button
             onClick={() => setActiveTab('profile')}
             className="w-7 h-7 rounded-full border border-white/20 overflow-hidden hover:border-white transition-colors relative group"
@@ -308,7 +286,6 @@ export const TopNavbar: React.FC<NavigationProps> = ({
             />
           </button>
 
-          {/* Mobile Menu Toggle */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden p-2 text-white/60 hover:text-white rounded"
@@ -344,6 +321,12 @@ export const TopNavbar: React.FC<NavigationProps> = ({
             className="text-left py-2 px-3 text-xs tracking-wider uppercase text-white hover:bg-white/5 rounded"
           >
             Archive Sessions
+          </button>
+          <button
+            onClick={() => { setActiveTab('analytics'); setMobileMenuOpen(false); }}
+            className="text-left py-2 px-3 text-xs tracking-wider uppercase text-white hover:bg-white/5 rounded"
+          >
+            Analytics
           </button>
           <button
             onClick={() => { setActiveTab('settings'); setMobileMenuOpen(false); }}

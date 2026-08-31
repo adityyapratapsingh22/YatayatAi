@@ -33,8 +33,6 @@ from app.schemas.auth_schemas import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-AVATAR_DIR = "uploaded_avatars"
-
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, db: DBSession = Depends(get_db)):
@@ -129,15 +127,15 @@ async def upload_avatar(
     if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
         ext = ".jpg"
 
-    os.makedirs(AVATAR_DIR, exist_ok=True)
+    os.makedirs(settings.AVATAR_DIR, exist_ok=True)
     filename = f"user_{current_user.id}{ext}"
-    filepath = os.path.join(AVATAR_DIR, filename)
+    filepath = os.path.join(settings.AVATAR_DIR, filename)
 
     # Clean up a previously uploaded avatar with a different extension, so re-uploading
     # a PNG after a JPG doesn't leave the old file orphaned on disk.
     if current_user.avatar_url:
         old_filename = os.path.basename(current_user.avatar_url)
-        old_filepath = os.path.join(AVATAR_DIR, old_filename)
+        old_filepath = os.path.join(settings.AVATAR_DIR, old_filename)
         if old_filename != filename and os.path.exists(old_filepath):
             os.remove(old_filepath)
 

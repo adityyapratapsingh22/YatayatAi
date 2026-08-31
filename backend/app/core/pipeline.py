@@ -4,6 +4,11 @@ from ultralytics import YOLO
 
 _model = None
 
+# YOLO's default COCO weights detect 80 object classes total -- not just vehicles.
+# Without this filter, pedestrians, stop signs, traffic lights, etc. get tracked and
+# counted right alongside actual vehicles, silently inflating every count.
+VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck", "bicycle"}
+
 
 def get_model():
     global _model
@@ -72,10 +77,13 @@ def run_pipeline(
         active_this_frame = 0
 
         if frame_result.boxes.id is not None:
-            active_this_frame = len(frame_result.boxes.id)
             for box, track_id in zip(frame_result.boxes, frame_result.boxes.id):
-                tid = int(track_id)
                 cls_name = model.names[int(box.cls)]
+                if cls_name not in VEHICLE_CLASSES:
+                    continue  # skip pedestrians, stop signs, and everything else non-vehicle
+
+                active_this_frame += 1
+                tid = int(track_id)
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 cy = (y1 + y2) / 2
 

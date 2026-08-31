@@ -7,7 +7,7 @@ import type { ProfileStats } from '../services/authApi';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export const ProfileView: React.FC = () => {
-  const { user, updateProfile, uploadAvatar } = useAuth();
+  const { user, updateProfile, uploadAvatar, avatarVersion } = useAuth();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -135,7 +135,7 @@ export const ProfileView: React.FC = () => {
             >
               {user?.avatar_url ? (
                 <img
-                  src={`${API_BASE_URL}${user.avatar_url}`}
+                  src={`${API_BASE_URL}${user.avatar_url}?v=${avatarVersion}`}
                   alt={user.full_name}
                   className="w-full h-full object-cover"
                 />
