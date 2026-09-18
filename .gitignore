@@ -10,8 +10,14 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 
-# YOLO model weights (auto-downloaded on first run, no need to commit ~6MB+ files)
+# YOLO model weights (ignore auto-downloaded base models, keep fine-tuned model)
 *.pt
+!backend/models/indian_vehicles.pt
+
+# Training datasets & raw data (do NOT commit to git)
+datasets/
+backend/training_data/
+training_data/
 
 # Uploaded videos and inference output
 backend/uploaded_videos/

@@ -21,6 +21,9 @@ class Settings:
     # Frontend URL, used to build the password reset link sent by email
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+    # Database
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+
     # Shared directory names, defined once so backend files don't duplicate the string
     AVATAR_DIR: str = "uploaded_avatars"
     UPLOAD_DIR: str = "uploaded_videos"
@@ -31,5 +34,11 @@ settings = Settings()
 if not settings.SECRET_KEY:
     raise RuntimeError(
         "SECRET_KEY is not set. Create a .env file in backend/ with a SECRET_KEY value "
+        "(see .env.example)."
+    )
+
+if not settings.DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not set. Create a .env file in backend/ with a DATABASE_URL value "
         "(see .env.example)."
     )

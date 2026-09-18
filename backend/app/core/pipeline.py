@@ -7,24 +7,37 @@ _model = None
 # YOLO's default COCO weights detect 80 object classes total -- not just vehicles.
 # Without this filter, pedestrians, stop signs, traffic lights, etc. get tracked and
 # counted right alongside actual vehicles, silently inflating every count.
-VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck", "bicycle"}
+VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck", "autorickshaw", "bicycle"}
+
+# Path to the fine-tuned weights, trained on Indian traffic (IDD Detection subset).
+# Falls back to stock YOLOv8s weights if the fine-tuned file isn't present yet.
+# Use yolov8s (small) as fallback -- better accuracy baseline than nano.
+FINETUNED_WEIGHTS = "models/indian_vehicles.pt"
+FALLBACK_WEIGHTS = "yolov8s.pt"
+
 
 
 def get_model():
     global _model
     if _model is None:
-        _model = YOLO("yolov8n.pt")
+        import os
+        if os.path.exists(FINETUNED_WEIGHTS):
+            _model = YOLO(FINETUNED_WEIGHTS)
+        else:
+            print(f"WARNING: fine-tuned weights not found at '{FINETUNED_WEIGHTS}', "
+                  f"falling back to stock '{FALLBACK_WEIGHTS}'.")
+            _model = YOLO(FALLBACK_WEIGHTS)
     return _model
 
 
 def run_pipeline(
     video_path,
     line_y_ratio: float = 0.65,
-    min_frames_before_count: int = 5,
+    min_frames_before_count: int = 2,
     smoothing_window_seconds: float = 2,
     light_threshold: float = 5,
     moderate_threshold: float = 12,
-    confidence: float = 0.25,
+    confidence: float = 0.15,
     device: int = 0,
 ):
     """
@@ -33,7 +46,8 @@ def run_pipeline(
 
     confidence: YOLO's detection confidence threshold (0.0-1.0). Lower values detect more
     objects (higher recall) at the cost of more false positives; higher values are stricter.
-    Ultralytics' default is 0.25.
+    Default is 0.15 (lower than Ultralytics' 0.25 default) to improve recall on partially
+    occluded or distant vehicles. The min_frames_before_count guard absorbs the extra noise.
     """
     model = get_model()
 
@@ -48,6 +62,7 @@ def run_pipeline(
 
     track_class_votes = defaultdict(list)
     track_frame_count = defaultdict(int)
+    track_first_side = {}
     prev_side = {}
     already_counted = set()
     counts_by_class = Counter()
@@ -91,14 +106,21 @@ def run_pipeline(
                 track_frame_count[tid] += 1
                 current_side = "above" if cy < line_y else "below"
 
-                if tid in prev_side:
-                    crossed = prev_side[tid] != current_side
-                    stable_enough = track_frame_count[tid] >= min_frames_before_count
-                    if crossed and stable_enough and tid not in already_counted:
-                        majority_class, _ = Counter(track_class_votes[tid]).most_common(1)[0]
-                        counts_by_class[majority_class] += 1
-                        total_count += 1
-                        already_counted.add(tid)
+                if tid not in track_first_side:
+                    track_first_side[tid] = current_side
+
+                # Crossed if it flipped from previous frame OR is on the opposite side from where first detected
+                crossed = (
+                    (tid in prev_side and prev_side[tid] != current_side)
+                    or (current_side != track_first_side[tid])
+                )
+                stable_enough = track_frame_count[tid] >= min_frames_before_count
+
+                if crossed and stable_enough and tid not in already_counted:
+                    majority_class, _ = Counter(track_class_votes[tid]).most_common(1)[0]
+                    counts_by_class[majority_class] += 1
+                    total_count += 1
+                    already_counted.add(tid)
 
                 prev_side[tid] = current_side
 

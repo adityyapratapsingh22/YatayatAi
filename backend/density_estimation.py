@@ -20,6 +20,11 @@ DENSITY_COLORS = {
     "Heavy": (0, 0, 255),
 }
 
+# Only count actual vehicle classes -- the same set used by pipeline.py.
+# Without this filter, pedestrians, signs, etc. inflate the active-vehicle
+# count and produce incorrect density readings.
+VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck", "autorickshaw"}
+
 model = YOLO("yolov8n.pt")
 
 cap = cv2.VideoCapture(SOURCE_VIDEO)
@@ -67,11 +72,14 @@ for frame_result in results_stream:
     active_this_frame = 0
 
     if frame_result.boxes.id is not None:
-        active_this_frame = len(frame_result.boxes.id)
-
         for box, track_id in zip(frame_result.boxes, frame_result.boxes.id):
-            tid = int(track_id)
+
             cls_name = model.names[int(box.cls)]
+            if cls_name not in VEHICLE_CLASSES:
+                continue  # skip pedestrians, signs, etc. -- same filter as pipeline.py
+
+            active_this_frame += 1
+            tid = int(track_id)
             x1, y1, x2, y2 = box.xyxy[0].tolist()
             cy = (y1 + y2) / 2
 
@@ -93,6 +101,7 @@ for frame_result in results_stream:
                     already_counted.add(tid)
 
             prev_side[tid] = current_side
+
 
     # --- Phase 5: update rolling average and classify density ---
     active_count_history.append(active_this_frame)

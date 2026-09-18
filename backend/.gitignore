@@ -10,6 +10,13 @@ env/
 *.db
 *.sqlite3
 
+training_data/
+uploaded_videos/
+uploaded_avatars/
+runs/
+*.mp4
+*.jpg
+
 .vscode/
 .idea/
 

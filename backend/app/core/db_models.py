@@ -47,7 +47,7 @@ class UserSettings(Base):
     heavy_threshold = Column(Float, default=12.0)
     counting_line_position = Column(Float, default=65.0)
     smoothing_window_seconds = Column(Float, default=2.0)
-    detection_sensitivity = Column(Float, default=75.0)
+    detection_sensitivity = Column(Float, default=85.0)  # maps to conf=0.15 (1 - 85/100)
     email_alerts_enabled = Column(Boolean, default=False)
 
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

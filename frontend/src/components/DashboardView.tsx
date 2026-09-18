@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import type { TelemetryUpdate } from '../hooks/useAnalyticsSocket';
+import { getSettings } from '../services/settingsApi';
 
 interface DashboardViewProps {
   connected: boolean;
@@ -43,6 +44,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenUploadModal,
 }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [linePosition, setLinePosition] = useState<number>(65);
+
+  useEffect(() => {
+    getSettings()
+      .then((s) => {
+        if (s?.counting_line_position) setLinePosition(s.counting_line_position);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!previewFile) {
@@ -120,7 +130,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 Video Preview
               </h3>
               {previewUrl ? (
-                <video src={previewUrl} controls className="w-full rounded border border-white/10" />
+                <div className="relative w-full rounded overflow-hidden border border-white/10 bg-black">
+                  <video src={previewUrl} controls className="w-full rounded block" />
+                  <div
+                    className="absolute left-0 right-0 pointer-events-none flex items-center border-t-2 border-dashed border-rose-500/80 z-10"
+                    style={{ top: `${linePosition}%` }}
+                  >
+                    <span className="bg-rose-600/90 text-white text-[9px] font-mono px-2 py-0.5 rounded-r uppercase tracking-wider font-semibold shadow">
+                      Counting Line ({linePosition}%)
+                    </span>
+                  </div>
+                </div>
               ) : (
                 <div className="w-full aspect-video bg-[#121212] rounded flex items-center justify-center text-white/20 text-sm">
                   No video selected
