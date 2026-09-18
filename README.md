@@ -2,11 +2,11 @@
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white)
-![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-purple?logo=yolo&logoColor=white)
+![YOLOv8s](https://img.shields.io/badge/YOLOv8s-Fine--tuned%20(IDD)-purple?logo=yolo&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase%20Cloud-336791?logo=postgresql&logoColor=white)
 ![React](https://img.shields.io/badge/React-Frontend-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/TailwindCSS-v4-06B6D4?logo=tailwindcss&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite&logoColor=white)
 ![JWT](https://img.shields.io/badge/Auth-JWT-black?logo=jsonwebtokens&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -40,41 +40,66 @@ Traditional traffic monitoring relies on manual counting or expensive dedicated 
 
 ## ✨ Features
 
-- 🚗 **Vehicle Detection** — pretrained YOLO model detects car, bus, truck, motorcycle, and bicycle per frame, with a strict class filter that excludes pedestrians and every other non-vehicle COCO class from all counts
-- 🎯 **Multi-Object Tracking** — ByteTrack assigns each vehicle a persistent ID across frames
-- 📏 **Line-Crossing Counting** — accurate one-time counts per vehicle, broken down by class
-- 🌡️ **Density Estimation** — live congestion level (Light / Moderate / Heavy), smoothed over a rolling window
-- ⚡ **Real-Time Streaming** — live analytics pushed to the browser over an authenticated WebSocket as the video is processed
-- 🗄️ **Persistent History** — every session is saved to a database, scoped to its owner, searchable and filterable, with full trend data and both CSV and PDF export per session
-- 📊 **Live Dashboard** — video preview, live stat cards, and charts, all fed from the real pipeline
-- 🔐 **Real Authentication** — registration, login, JWT access + refresh tokens (with consistent auto-refresh across every part of the app), and email-based password reset, all enforced server-side
-- ⚙️ **Per-User Settings** — density thresholds, counting line position, smoothing window, and detection sensitivity are all editable and actually drive the pipeline on your next run
-- 📧 **Live Density Alerts** — optionally get emailed the moment a session reaches Heavy congestion
-- 👤 **Real Profiles** — editable name/email, secure password change, real lifetime stats computed from your session history, and photo upload with correct cache invalidation
-- 📄 **PDF Reports** — server-generated, professionally formatted PDF for any completed session, with a real embedded trend chart and per-class breakdown table
-- 📈 **Aggregate Analytics** — cross-session insights computed server-side: total vehicles ever counted, density distribution, all-time vehicle-type breakdown, busiest session, and day-by-day activity trend
+- 🚗 **Indian Traffic Vehicle Detection** — Fine-tuned YOLOv8s model detecting `car`, `truck`, `bus`, `motorcycle`, `autorickshaw`, and `bicycle`, with strict non-vehicle class filtering.
+- 🎯 **Multi-Object Tracking** — ByteTrack assigns persistent tracking IDs across frames to track individual trajectories.
+- 📏 **Intelligent Line-Crossing Counter** — Persistent side-tracking logic (`track_first_side`) that accurately registers vehicles even in slow crawl, heavy congestion, or momentary occlusions.
+- 📐 **Live Visual Counting Line** — Dynamic dashed overlay on the dashboard video preview showing the exact line position configured in settings.
+- 🌡️ **Density Estimation** — Real-time congestion status (Light / Moderate / Heavy) smoothed across rolling frame windows.
+- ⚡ **Real-Time Streaming** — Live telemetry pushed to the browser over an authenticated WebSocket as inference runs at ~160 FPS on GPU.
+- ☁️ **Cloud Database Persistence** — Fully migrated to **Supabase PostgreSQL**; all users, configurations, sessions, snapshots, and vehicle counts persist in the cloud.
+- 📊 **Live Dashboard** — Video preview with counting line overlay, live stat cards, and smoothed density charts.
+- 🔐 **Authentication** — Registration, login, JWT access + refresh tokens, and email-based password reset via Gmail SMTP.
+- ⚙️ **Per-User Settings** — Customizable density thresholds, adjustable counting line position (10%–90%), smoothing window, and detection sensitivity.
+- 📧 **Live Density Alerts** — Optional automated email notification sent the moment a session hits Heavy traffic density.
+- 👤 **User Profiles** — Editable name/email, password change, real lifetime statistics, and profile photo upload.
+- 📄 **PDF Reports** — Downloadable server-generated PDF report for completed sessions, featuring session metadata, embedded Matplotlib trend charts, and class breakdown tables.
+- 📈 **Aggregate Analytics** — Cross-session analytics computed server-side via SQL aggregate queries.
+
+- ## 🚀 Model Architecture & Benchmark Results
+The system was upgraded from a stock nano baseline to a **custom fine-tuned YOLOv8s (11.1M parameters)** trained for **100 epochs** on **14,475 annotated images** from the **India Driving Dataset (IDD)**.
+### Overall Benchmark Metrics
+| Metric | Baseline (YOLOv8n - 50 ep, 3k img) | Fine-Tuned (YOLOv8s - 100 ep, 14.5k img) | Net Gain |
+|---|---|---|---|
+| **mAP@50** | `0.524` (52.4%) | **`0.704` (70.4%)** | **+18.0% 🚀** |
+| **mAP@50-95** | `0.344` (34.4%) | **`0.490` (49.0%)** | **+14.6% 🚀** |
+| **Precision** | `0.665` (66.5%) | **`0.845` (84.5%)** | **+18.0% 🎯** |
+| **Recall** | `0.475` (47.5%) | **`0.624` (62.4%)** | **+14.9% 🔍** |
+
+### Per-Class Accuracy (mAP@50)
+| Vehicle Class | Baseline mAP@50 | Fine-Tuned mAP@50 | Gain |
+|---|---|---|---|
+| **Bus** | 58.5% | **78.2%** | **+19.7%** 🔥 |
+| **Autorickshaw** | 61.3% | **77.9%** | **+16.6%** 🔥 |
+| **Truck** | 50.7% | **74.0%** | **+23.3%** 🔥 |
+| **Car** | 60.0% | **72.4%** | **+12.4%** 🔥 |
+| **Motorcycle** | 58.6% | **71.6%** | **+13.0%** 🔥 |
+| **Bicycle** | 25.4% | **48.4%** | **+23.0%** 🔥 |
+
+### Inference Latency (NVIDIA RTX 3050 Laptop GPU)
+- **Preprocess:** `0.2 ms` | **Inference:** `3.7 ms` | **Postprocess:** `2.2 ms`
+- **Total Latency:** **~6.1 ms per frame (~160 FPS real-time throughput)**
+---
 
 ## 🛠️ Tech Stack
-
 | Layer | Technology |
 |---|---|
-| 🧠 Computer Vision | Ultralytics YOLO (YOLOv8 / YOLO26) + OpenCV |
-| 🎯 Tracking | ByteTrack (via Ultralytics `model.track()`) |
-| ⚙️ Backend | Python, FastAPI, WebSockets |
-| 🔐 Auth | JWT (access + refresh tokens), bcrypt password hashing, Gmail SMTP for reset/alert emails |
+| 🧠 Computer Vision | Fine-tuned Ultralytics YOLOv8s (`models/indian_vehicles.pt`) + OpenCV |
+| 🎯 Tracking | ByteTrack (`bytetrack.yaml`) with persistent side-crossing state |
+| ⚙️ Backend | Python 3.12, FastAPI, WebSockets, Uvicorn |
+| 🗄️ Cloud Database | **Supabase PostgreSQL** via SQLAlchemy ORM & `psycopg2-binary` (Session/Transaction Pooler) |
+| 🔐 Auth & Security | JWT (access + refresh tokens), bcrypt password hashing, Gmail SMTP |
 | 📄 Reporting | ReportLab (PDF layout) + Matplotlib (chart rendering) |
-| 📈 Analytics | SQLAlchemy aggregate queries (GROUP BY / SUM across sessions) |
-| 🎨 Frontend | React + TypeScript, Vite, Tailwind CSS v4 |
-| 🗄️ Database | SQLite via SQLAlchemy |
-| 🖼️ File Storage | FastAPI static file serving (avatars), local disk (videos) |
-| 🚀 Deployment (planned) | Docker |
+| 📈 Analytics | SQLAlchemy aggregate queries (`func.count`, `func.sum`, `func.coalesce`) |
+| 🎨 Frontend | React, TypeScript, Vite, Tailwind CSS v4, Lucide Icons |
+| 🖼️ File Storage | Local storage for uploads/avatars + Supabase Cloud for relational data |
+---
 
 ## 🔄 System Pipeline
 
 ```mermaid
 flowchart TD
-    A[🎥 Video Input] --> B[🧠 Vehicle Detection - YOLO]
-    B --> B2[🚫 Non-vehicle classes filtered out]
+    A[🎥 Video Input] --> B[🧠 Fine-Tuned YOLOv8s Model - IDD Trained]
+    B --> B2[🚫 Strict Vehicle Class Filter]
     B2 --> C[🎯 Object Tracking - ByteTrack]
     C --> D[📏 Counting and Classification]
     D --> E[🌡️ Density Estimation]
@@ -180,21 +205,21 @@ AI_Traffic_Analyzer/
 
 ### Clone the repository
 ```bash
-git clone https://github.com/adityyapratapsingh22/AI_Traffic_Analyzer.git
-cd AI_Traffic_Analyzer
+git clone https://github.com/adityyapratapsingh22/YatayatAi.git
+cd YatayatAi
 ```
 
-### Backend setup
-```bash
 cd backend
+```
 python -m venv venv
-venv\Scripts\Activate.ps1      # Windows PowerShell
-pip install ultralytics opencv-python fastapi "uvicorn[standard]" python-multipart websockets sqlalchemy "passlib[bcrypt]" "python-jose[cryptography]" python-dotenv "pydantic[email]" reportlab matplotlib
+venv\Scripts\Activate.ps1       # Windows PowerShell
+# source venv/bin/activate      # Linux / macOS
 
-# Copy .env.example to .env and fill in your SECRET_KEY and Gmail SMTP credentials
-copy .env.example .env
+pip install ultralytics opencv-python fastapi "uvicorn[standard]" python-multipart websockets sqlalchemy psycopg2-binary "passlib[bcrypt]" "python-jose[cryptography]" python-dotenv "pydantic[email]" reportlab matplotlib
 
-uvicorn app.main:app --reload
+# Configure your environment variables
+copy .env.example .env          # Windows
+# cp .env.example .env          # Linux / macOS
 ```
 
 ### Frontend setup
@@ -216,8 +241,7 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 | Page | Purpose | Status |
 |---|---|---|
 | 🏠 Landing | Marketing/intro page explaining the project | ✅ Live |
-| 🔐 Login | Real authentication against the backend | ✅ Live |
-| 📝 Register | Create a new account | ✅ Live |
+| 🔐 Login/Register | Authentication backed by Supabase PostgreSQL | ✅ Live |
 | 🔑 Forgot Password | Request a real emailed reset link | ✅ Live |
 | 🔓 Reset Password | Set a new password via the emailed token | ✅ Live |
 | 📊 Dashboard | Live analysis — upload a video and watch real-time detection, tracking, and density stats | ✅ Live |
@@ -235,8 +259,9 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 ### Phase 1–5: Computer Vision Pipeline
 | Task | Status |
 |---|---|
-| Environment setup (GPU-accelerated YOLO) | ✅ Done |
-| Vehicle detection (YOLO, pretrained) | ✅ Done |
+| Vehicle detection (YOLOv8s) | ✅ Done |
+| Fine-tune YOLOv8s on Indian Driving Dataset (14.5k images) | ✅ Done |
+| Train full 100 epochs with close-mosaic optimization (70.4% mAP@50) | ✅ Done |
 | Multi-object tracking (ByteTrack) | ✅ Done |
 | ID-switch / class-flicker noise filtering | ✅ Done |
 | Line-crossing vehicle counting | ✅ Done |
