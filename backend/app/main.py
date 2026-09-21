@@ -66,6 +66,7 @@ def _send_density_alert_safe(to_email: str, video_id: str, avg_active_vehicles: 
 
 
 @app.get("/")
+@app.head("/")
 def root():
     return {"status": "AI Traffic Analyzer backend is running"}
 

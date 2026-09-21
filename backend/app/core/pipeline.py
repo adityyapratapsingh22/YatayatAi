@@ -44,15 +44,9 @@ def run_pipeline(
     if device is None:
         device = 0 if torch.cuda.is_available() else "cpu"
 
-    """
-    Runs detection + tracking + line-crossing counting + density estimation on a video,
-    yielding one analytics dict per processed frame.
+    if device == "cpu":
+        torch.set_num_threads(2)
 
-    confidence: YOLO's detection confidence threshold (0.0-1.0). Lower values detect more
-    objects (higher recall) at the cost of more false positives; higher values are stricter.
-    Default is 0.15 (lower than Ultralytics' 0.25 default) to improve recall on partially
-    occluded or distant vehicles. The min_frames_before_count guard absorbs the extra noise.
-    """
     model = get_model()
 
     cap = cv2.VideoCapture(video_path)
@@ -88,11 +82,16 @@ def run_pipeline(
         persist=True,
         stream=True,
         conf=confidence,
+        imgsz=640,
+        verbose=False,
     )
 
     frame_index = 0
     for frame_result in results_stream:
         frame_index += 1
+        if frame_index % 30 == 0:
+            import gc
+            gc.collect()
         active_this_frame = 0
 
         if frame_result.boxes.id is not None:
