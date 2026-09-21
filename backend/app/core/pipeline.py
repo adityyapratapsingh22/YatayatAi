@@ -1,5 +1,6 @@
 from collections import defaultdict, Counter, deque
 import cv2
+import torch
 from ultralytics import YOLO
 
 _model = None
@@ -38,8 +39,11 @@ def run_pipeline(
     light_threshold: float = 5,
     moderate_threshold: float = 12,
     confidence: float = 0.15,
-    device: int = 0,
+    device=None,
 ):
+    if device is None:
+        device = 0 if torch.cuda.is_available() else "cpu"
+
     """
     Runs detection + tracking + line-crossing counting + density estimation on a video,
     yielding one analytics dict per processed frame.
