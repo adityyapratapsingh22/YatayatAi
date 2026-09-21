@@ -1,6 +1,27 @@
 import { useState, useRef, useCallback } from 'react';
 
-const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000/ws/analytics';
+function getWsBaseUrl(): string {
+  const envWs = import.meta.env.VITE_WS_BASE_URL;
+  if (envWs && typeof envWs === 'string' && envWs.trim() !== '') {
+    return envWs.trim().replace(/\/+$/, '');
+  }
+
+  const envApi = import.meta.env.VITE_API_BASE_URL;
+  if (envApi && typeof envApi === 'string' && envApi.trim() !== '') {
+    const cleanApi = envApi.trim().replace(/\/+$/, '');
+    const wsProto = cleanApi.startsWith('https') ? 'wss' : 'ws';
+    const host = cleanApi.replace(/^https?:\/\//, '');
+    return `${wsProto}://${host}/ws/analytics`;
+  }
+
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    return `wss://${window.location.host}/ws/analytics`;
+  }
+
+  return 'ws://localhost:8000/ws/analytics';
+}
+
+const WS_BASE_URL = getWsBaseUrl();
 
 export interface TelemetryUpdate {
   frame_index: number;
@@ -30,7 +51,11 @@ export function useAnalyticsSocket() {
     setError(null);
     setLatest(null);
 
-    const ws = new WebSocket(`${WS_BASE_URL}/${videoId}?token=${encodeURIComponent(token)}`);
+    const cleanBase = WS_BASE_URL.replace(/\/+$/, '');
+    const cleanVideoId = encodeURIComponent(videoId.replace(/^\/+/, ''));
+    const wsUrl = `${cleanBase}/${cleanVideoId}?token=${encodeURIComponent(token)}`;
+
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => setConnected(true);
@@ -41,7 +66,7 @@ export function useAnalyticsSocket() {
       }
     };
     ws.onerror = () => {
-      setError('WebSocket connection error -- verify backend server is running at http://localhost:8000');
+      setError(`WebSocket connection error connecting to ${cleanBase}. Ensure the backend is online and reachable.`);
       setConnected(false);
     };
 
