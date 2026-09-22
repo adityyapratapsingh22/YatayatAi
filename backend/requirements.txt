@@ -15,3 +15,4 @@ python-jose[cryptography]>=3.3.0
 pydantic[email]>=2.6.0
 reportlab>=4.1.0
 matplotlib>=3.8.0
+lap==0.5.13

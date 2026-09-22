@@ -1,6 +1,14 @@
+import os
+import gc
 from collections import defaultdict, Counter, deque
 import cv2
 import torch
+
+# Disable Ultralytics auto-install of missing packages (e.g. lap) at runtime.
+# These must be pre-installed via requirements.txt. Auto-updates on Render
+# fail silently or crash the pipeline mid-stream.
+os.environ.setdefault("YOLO_AUTOINSTALL", "False")
+
 from ultralytics import YOLO
 
 _model = None
