@@ -8,6 +8,7 @@ import {
   Layers,
   Activity,
   AlertTriangle,
+  X,
 } from 'lucide-react';
 import type { TelemetryUpdate } from '../hooks/useAnalyticsSocket';
 import { getSettings } from '../services/settingsApi';
@@ -45,6 +46,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [linePosition, setLinePosition] = useState<number>(65);
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
+
+  // Reset dismiss when a new error arrives
+  const visibleError = error && error !== dismissedError ? error : null;
 
   useEffect(() => {
     getSettings()
@@ -100,10 +105,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Error banner */}
-      {error && (
+      {visibleError && (
         <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded text-rose-300 text-xs">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          <span>{error}</span>
+          <span className="flex-1">{visibleError}</span>
+          <button
+            onClick={() => setDismissedError(visibleError)}
+            className="ml-2 text-rose-300/60 hover:text-rose-200 transition-colors"
+            title="Dismiss"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
