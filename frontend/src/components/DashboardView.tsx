@@ -15,6 +15,7 @@ import { getSettings } from '../services/settingsApi';
 
 interface DashboardViewProps {
   connected: boolean;
+  connecting: boolean;
   latest: TelemetryUpdate | null;
   history: TelemetryUpdate[];
   error: string | null;
@@ -38,6 +39,7 @@ const CLASS_ICONS: Record<string, React.ElementType> = {
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   connected,
+  connecting,
   latest,
   history,
   error,
@@ -104,8 +106,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Connecting / retrying banner */}
+      {connecting && (
+        <div className="flex items-center gap-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded text-blue-300 text-xs">
+          <svg className="w-4 h-4 flex-shrink-0 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+          </svg>
+          <span>Connecting to backend — if this takes a moment, the server is waking up (Render free tier)…</span>
+        </div>
+      )}
+
       {/* Error banner */}
-      {visibleError && (
+      {visibleError && !connecting && (
         <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded text-rose-300 text-xs">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
           <span className="flex-1">{visibleError}</span>

@@ -37,7 +37,7 @@ function AppShell() {
     return params.get('token');
   });
 
-  const { connected, latest, history, error: wsError, connect } = useAnalyticsSocket();
+  const { connected, connecting, latest, history, error: wsError, connect } = useAnalyticsSocket();
   const [previewFile, setPreviewFile] = useState<File | null>(null);
 
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -188,6 +188,7 @@ function AppShell() {
           {activeTab === 'dashboard' && (
             <DashboardView
               connected={connected}
+              connecting={connecting}
               latest={latest}
               history={history}
               error={wsError}
