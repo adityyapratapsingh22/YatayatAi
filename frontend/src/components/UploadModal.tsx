@@ -41,8 +41,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     } catch (err) {
       setUploadError(
         err instanceof Error
-          ? `Upload failed: ${err.message}. Is the backend running at http://localhost:8000?`
-          : 'Upload failed. Is the backend running?'
+          ? `Upload failed: ${err.message}`
+          : 'Upload failed. The backend may be starting up — please try again in a moment.'
       );
     } finally {
       setIsUploading(false);
