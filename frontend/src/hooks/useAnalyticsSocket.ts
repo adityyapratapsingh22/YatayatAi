@@ -21,12 +21,23 @@ function getWsBaseUrl(): string {
   return 'ws://localhost:8000/ws/analytics';
 }
 
-const WS_BASE_URL = getWsBaseUrl();
+function getHttpBaseUrl(): string {
+  const envApi = import.meta.env.VITE_API_BASE_URL;
+  if (envApi && typeof envApi === 'string' && envApi.trim() !== '') {
+    return envApi.trim().replace(/\/+$/, '');
+  }
+  return 'http://localhost:8000';
+}
 
-// Render free tier can take up to 50 seconds to cold-start.
-// Retry up to MAX_RETRIES times with increasing delays before giving up.
-const MAX_RETRIES = 5;
-const RETRY_DELAYS_MS = [3000, 5000, 8000, 12000, 15000]; // total ~43s of retry window
+const WS_BASE_URL = getWsBaseUrl();
+const HTTP_BASE_URL = getHttpBaseUrl();
+
+// Render free tier takes up to 60 seconds to cold-start.
+// Strategy: first ping HTTP to wake the server, then open WebSocket.
+// If WebSocket still fails, keep retrying for up to ~90 seconds total.
+const MAX_RETRIES = 8;
+// Delays between WS retries (ms). Total window ~87 seconds.
+const RETRY_DELAYS_MS = [3000, 5000, 8000, 10000, 12000, 15000, 17000, 17000];
 
 export interface TelemetryUpdate {
   frame_index: number;
@@ -44,14 +55,14 @@ export function useAnalyticsSocket() {
   const [latest, setLatest] = useState<TelemetryUpdate | null>(null);
   const [history, setHistory] = useState<TelemetryUpdate[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState<number>(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeVideoIdRef = useRef<string>('');
-  const activeTokenRef = useRef<string>('');
-  const attemptRef = useRef<number>(0);
+  const videoIdRef = useRef<string>('');
+  const tokenRef = useRef<string>('');
   const cancelledRef = useRef<boolean>(false);
+  // Track whether we are mid-retry so onclose doesn't prematurely clear connecting
+  const willRetryRef = useRef<boolean>(false);
 
   const clearRetryTimer = () => {
     if (retryTimerRef.current) {
@@ -60,65 +71,76 @@ export function useAnalyticsSocket() {
     }
   };
 
-  // token is required now -- the backend rejects the WebSocket handshake (code 4401)
-  // if it's missing or invalid, since this endpoint is authenticated per-user.
-  const attemptConnect = useCallback((videoId: string, token: string, attempt: number) => {
+  const openWebSocket = useCallback((attempt: number) => {
     if (cancelledRef.current) return;
 
-    setConnecting(true);
-    setRetryCount(attempt);
-
     const cleanBase = WS_BASE_URL.replace(/\/+$/, '');
-    const cleanVideoId = encodeURIComponent(videoId.replace(/^\/+/, ''));
-    const wsUrl = `${cleanBase}/${cleanVideoId}?token=${encodeURIComponent(token)}`;
+    const cleanVideoId = encodeURIComponent(videoIdRef.current.replace(/^\/+/, ''));
+    const wsUrl = `${cleanBase}/${cleanVideoId}?token=${encodeURIComponent(tokenRef.current)}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
       if (cancelledRef.current) { ws.close(); return; }
+      willRetryRef.current = false;
       setConnected(true);
       setConnecting(false);
       setError(null);
-      setRetryCount(0);
+    };
+
+    ws.onerror = () => {
+      if (cancelledRef.current) return;
+
+      const nextAttempt = attempt + 1;
+      if (nextAttempt <= MAX_RETRIES) {
+        // Mark that we will retry so onclose doesn't clear connecting state
+        willRetryRef.current = true;
+        const delay = RETRY_DELAYS_MS[attempt] ?? 17000;
+        const totalSecsLeft = RETRY_DELAYS_MS
+          .slice(nextAttempt - 1)
+          .reduce((a, b) => a + b, 0) / 1000;
+        setError(
+          `Backend is waking up — retrying in ${Math.round(delay / 1000)}s ` +
+          `(attempt ${nextAttempt}/${MAX_RETRIES}, ~${Math.round(totalSecsLeft)}s window left)…`
+        );
+        retryTimerRef.current = setTimeout(() => {
+          if (!cancelledRef.current) {
+            willRetryRef.current = false;
+            openWebSocket(nextAttempt);
+          }
+        }, delay);
+      } else {
+        // All retries exhausted — give up
+        willRetryRef.current = false;
+        setConnecting(false);
+        setError(
+          `Could not reach the backend after ${MAX_RETRIES} attempts (~90s). ` +
+          `Visit https://yatayatai.onrender.com in a new tab to wake it up, then upload again.`
+        );
+      }
     };
 
     ws.onclose = (event) => {
       if (cancelledRef.current) return;
       setConnected(false);
-      setConnecting(false);
 
       if (event.code === 4401) {
+        willRetryRef.current = false;
+        setConnecting(false);
         setError('Your session has expired. Please log in again.');
         return;
       }
-      // Normal close after processing finished — not an error
-      if (event.wasClean) return;
-    };
 
-    ws.onerror = () => {
-      if (cancelledRef.current) return;
-      setConnected(false);
-
-      const nextAttempt = attempt + 1;
-      if (nextAttempt <= MAX_RETRIES) {
-        const delay = RETRY_DELAYS_MS[attempt] ?? 15000;
-        const remaining = MAX_RETRIES - attempt;
-        setError(
-          `Backend is waking up — retrying in ${Math.round(delay / 1000)}s ` +
-          `(attempt ${nextAttempt}/${MAX_RETRIES}, ${remaining} left)…`
-        );
-        retryTimerRef.current = setTimeout(() => {
-          if (!cancelledRef.current) {
-            attemptConnect(activeVideoIdRef.current, activeTokenRef.current, nextAttempt);
-          }
-        }, delay);
-      } else {
+      // If we're about to retry (willRetryRef is true), keep connecting=true
+      // so the blue spinner stays visible and the error banner shows retry message
+      if (!willRetryRef.current) {
         setConnecting(false);
-        setError(
-          `Could not connect to the backend after ${MAX_RETRIES} attempts. ` +
-          `Please visit https://yatayatai.onrender.com to wake it up, then try again.`
-        );
+      }
+
+      // Clean close after pipeline finished — not an error
+      if (event.wasClean && event.code === 1000) {
+        setError(null);
       }
     };
 
@@ -137,33 +159,50 @@ export function useAnalyticsSocket() {
     };
   }, []);
 
+  // Ping HTTP health endpoint first to wake Render before opening WebSocket.
+  // This dramatically reduces cold-start time because the HTTP ping triggers
+  // the container to start, and by the time we open the WebSocket the server
+  // is usually already initializing.
+  const pingThenConnect = useCallback(async () => {
+    if (cancelledRef.current) return;
+    try {
+      await fetch(`${HTTP_BASE_URL}/`, { method: 'GET', signal: AbortSignal.timeout(10000) });
+    } catch {
+      // Ping failed or timed out — proceed anyway, WS retries will handle it
+    }
+    if (!cancelledRef.current) {
+      openWebSocket(0);
+    }
+  }, [openWebSocket]);
+
   const connect = useCallback((videoId: string, token: string) => {
-    // Cancel any in-progress retry loop
+    // Cancel any in-progress connection / retry loop
     cancelledRef.current = true;
+    willRetryRef.current = false;
     clearRetryTimer();
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
 
-    // Reset all state for new session
+    // Reset for new session
     cancelledRef.current = false;
-    activeVideoIdRef.current = videoId;
-    activeTokenRef.current = token;
-    attemptRef.current = 0;
+    videoIdRef.current = videoId;
+    tokenRef.current = token;
 
     setHistory([]);
     setError(null);
     setLatest(null);
     setConnected(false);
     setConnecting(true);
-    setRetryCount(0);
 
-    attemptConnect(videoId, token, 0);
-  }, [attemptConnect]);
+    // Ping HTTP first (wakes Render), then open WebSocket
+    pingThenConnect();
+  }, [pingThenConnect]);
 
   const disconnect = useCallback(() => {
     cancelledRef.current = true;
+    willRetryRef.current = false;
     clearRetryTimer();
     wsRef.current?.close();
     wsRef.current = null;
@@ -171,5 +210,5 @@ export function useAnalyticsSocket() {
     setConnecting(false);
   }, []);
 
-  return { connected, connecting, retryCount, latest, history, error, connect, disconnect };
+  return { connected, connecting, latest, history, error, connect, disconnect };
 }
