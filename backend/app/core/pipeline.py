@@ -63,8 +63,23 @@ def run_pipeline(
     fps = cap.get(cv2.CAP_PROP_FPS) or 25
     cap.release()
 
-    line_y = int(height * line_y_ratio)
-    smoothing_window_frames = max(1, int(fps * smoothing_window_seconds))
+    # On CPU (cloud), cap resolution to avoid OOM on Render's 512 MB free tier.
+    # 4K+ videos would crash the process; we downscale to at most 960 px wide.
+    MAX_WIDTH_CPU = 960
+    if device == "cpu" and width > MAX_WIDTH_CPU:
+        scale = MAX_WIDTH_CPU / width
+        proc_width = MAX_WIDTH_CPU
+        proc_height = int(height * scale)
+    else:
+        proc_width = width
+        proc_height = height
+
+    # On CPU, skip frames to reduce processing load: analyse every Nth frame.
+    # At 30 fps, FRAME_SKIP=2 means ~15 effective fps — still smooth analytics.
+    FRAME_SKIP = 2 if device == "cpu" else 1
+
+    line_y = int(proc_height * line_y_ratio)
+    smoothing_window_frames = max(1, int((fps / FRAME_SKIP) * smoothing_window_seconds))
 
     track_class_votes = defaultdict(list)
     track_frame_count = defaultdict(int)
@@ -90,7 +105,8 @@ def run_pipeline(
         persist=True,
         stream=True,
         conf=confidence,
-        imgsz=640,
+        imgsz=640,      # YOLO internal inference size
+        vid_stride=FRAME_SKIP,  # skip frames at the reader level (no extra memory)
         verbose=False,
     )
 
