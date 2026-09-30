@@ -242,8 +242,39 @@ async def analytics_ws(websocket: WebSocket, video_id: str, token: str = Query(.
     last_density = None
     heavy_alert_sent = False
 
+    # Use an asyncio.Queue to bridge the synchronous pipeline generator (which runs
+    # in a ThreadPoolExecutor) to the async WebSocket sender.  This keeps the event
+    # loop free so Render's health-check HTTP requests are answered while YOLO is
+    # processing frames -- without this, the blocking YOLO inference kills the process.
+    _SENTINEL = object()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=4)
+    loop = asyncio.get_event_loop()
+
+    def pipeline_thread():
+        """Runs in a ThreadPoolExecutor. Feeds updates into the queue."""
+        try:
+            for update in run_pipeline(video_path, **pipeline_kwargs):
+                # put_nowait would raise if full; use the sync-safe call instead
+                asyncio.run_coroutine_threadsafe(queue.put(update), loop).result()
+        except Exception as exc:
+            asyncio.run_coroutine_threadsafe(
+                queue.put({"error": f"Analysis failed: {str(exc)}"}), loop
+            ).result()
+        finally:
+            asyncio.run_coroutine_threadsafe(queue.put(_SENTINEL), loop).result()
+
     try:
-        for update in run_pipeline(video_path, **pipeline_kwargs):
+        future = loop.run_in_executor(None, pipeline_thread)
+
+        while True:
+            update = await queue.get()
+            if update is _SENTINEL:
+                break
+
+            if isinstance(update, dict) and update.get("error"):
+                await websocket.send_json(update)
+                break
+
             await websocket.send_json(update)
 
             last_counts_by_class = update["counts_by_class"]
@@ -273,7 +304,7 @@ async def analytics_ws(websocket: WebSocket, video_id: str, token: str = Query(.
                 ))
                 db.commit()
 
-            await asyncio.sleep(0)
+        await future  # surface any thread exception
 
         db_session.ended_at = datetime.now(timezone.utc)
         db_session.total_crossed = sum(last_counts_by_class.values())
