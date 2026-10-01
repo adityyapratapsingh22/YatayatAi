@@ -1,4 +1,4 @@
-# 🚦 AI Traffic Analyzer
+# 🚦 YATAYAT AI 
 
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white)
@@ -8,11 +8,16 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/TailwindCSS-v4-06B6D4?logo=tailwindcss&logoColor=white)
 ![JWT](https://img.shields.io/badge/Auth-JWT-black?logo=jsonwebtokens&logoColor=white)
+![Docker](https://img.shields.io/badge/Backend-Dockerized-2496ED?logo=docker&logoColor=white)
+![Render](https://img.shields.io/badge/Deployed%20on-Render-46E3B7?logo=render&logoColor=white)
+![Vercel](https://img.shields.io/badge/Frontend-Vercel-000000?logo=vercel&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 **AI-powered traffic video analysis: detect, track, count, and classify vehicles, estimate real-time traffic density, and visualize it all on a live analytics dashboard — secured behind real, backend-enforced user authentication, with per-account configuration, profiles, downloadable PDF reports, and cross-session aggregate analytics.**
 
 Built as a college mini project combining **Computer Vision**, **AI**, **Web Development**, and **Data Visualization**.
+
+Deployed as a real cloud application: a Dockerized FastAPI backend on **Render** (with automatic GPU/CPU fallback for CPU-only hosting) and a static React build on **Vercel**, talking to a **Supabase PostgreSQL** database — not just a localhost demo.
 
 ---
 
@@ -25,6 +30,7 @@ Built as a college mini project combining **Computer Vision**, **AI**, **Web Dev
 - [Authentication](#-authentication)
 - [Project Structure](#-project-structure)
 - [Getting Started](#-getting-started)
+- [Deployment](#️-deployment)
 - [Application Pages](#️-application-pages)
 - [Project Task Tracker](#-project-task-tracker)
 - [Quality Assurance & Bug Fixes](#-quality-assurance--bug-fixes)
@@ -45,8 +51,10 @@ Traditional traffic monitoring relies on manual counting or expensive dedicated 
 - 📏 **Intelligent Line-Crossing Counter** — Persistent side-tracking logic (`track_first_side`) that accurately registers vehicles even in slow crawl, heavy congestion, or momentary occlusions.
 - 📐 **Live Visual Counting Line** — Dynamic dashed overlay on the dashboard video preview showing the exact line position configured in settings.
 - 🌡️ **Density Estimation** — Real-time congestion status (Light / Moderate / Heavy) smoothed across rolling frame windows.
-- ⚡ **Real-Time Streaming** — Live telemetry pushed to the browser over an authenticated WebSocket as inference runs at ~160 FPS on GPU.
+- ⚡ **Real-Time Streaming** — Live telemetry pushed to the browser over an authenticated WebSocket as inference runs at ~160 FPS on GPU, automatically downscaling resolution and skipping frames on CPU-only cloud hosting to stay fast and memory-safe.
 - ☁️ **Cloud Database Persistence** — Fully migrated to **Supabase PostgreSQL**; all users, configurations, sessions, snapshots, and vehicle counts persist in the cloud.
+- 🚀 **Cloud Deployment** — Dockerized FastAPI backend deployed on **Render**, with automatic CUDA/CPU device detection so the same codebase runs full-speed on a GPU or gracefully degrades on Render's free CPU tier. Frontend deployed as a static build on **Vercel**.
+- 🔄 **Resilient Live Connection** — The dashboard's WebSocket auto-reconnects with backoff (~90s window) to ride out Render free-tier cold starts, pinging the backend awake first, with a "waking up" status banner and a dismissible error banner instead of a dead end.
 - 📊 **Live Dashboard** — Video preview with counting line overlay, live stat cards, and smoothed density charts.
 - 🔐 **Authentication** — Registration, login, JWT access + refresh tokens, and email-based password reset via Gmail SMTP.
 - ⚙️ **Per-User Settings** — Customizable density thresholds, adjustable counting line position (10%–90%), smoothing window, and detection sensitivity.
@@ -92,20 +100,25 @@ The system was upgraded from a stock nano baseline to a **custom fine-tuned YOLO
 | 📈 Analytics | SQLAlchemy aggregate queries (`func.count`, `func.sum`, `func.coalesce`) |
 | 🎨 Frontend | React, TypeScript, Vite, Tailwind CSS v4, Lucide Icons |
 | 🖼️ File Storage | Local storage for uploads/avatars + Supabase Cloud for relational data |
+| 🐳 Containerization | Docker (slim Python 3.12 image, CPU-only PyTorch build to keep image size down) |
+| ☁️ Hosting | Backend on **Render** (Docker), Frontend on **Vercel** (static build + SPA rewrites) |
 ---
 
 ## 🔄 System Pipeline
 
 ```mermaid
 flowchart TD
-    A[🎥 Video Input] --> B[🧠 Fine-Tuned YOLOv8s Model - IDD Trained]
+    A[🎥 Video Input] --> A2{GPU available?}
+    A2 -->|Yes| B[🧠 Fine-Tuned YOLOv8s Model - IDD Trained]
+    A2 -->|No - e.g. Render free tier| A3[📉 Downscale to 960px + skip every 2nd frame]
+    A3 --> B
     B --> B2[🚫 Strict Vehicle Class Filter]
     B2 --> C[🎯 Object Tracking - ByteTrack]
     C --> D[📏 Counting and Classification]
     D --> E[🌡️ Density Estimation]
     E --> F[⚡ Authenticated WebSocket Streaming]
     F --> G[📊 Live Dashboard]
-    F --> H[🗄️ SQLite Persistence, per user]
+    F --> H[🗄️ Supabase PostgreSQL Persistence, per user]
     F --> J[📧 Heavy-density email alert, if enabled]
     H --> I[📜 History and Trends]
     H --> L[📄 On-demand PDF Report]
@@ -142,7 +155,9 @@ flowchart LR
 ```
 AI_Traffic_Analyzer/
 ├── backend/
-│   ├── .env                        # SECRET_KEY, SMTP credentials (never committed)
+│   ├── .env                        # SECRET_KEY, DATABASE_URL, SMTP credentials (never committed)
+│   ├── Dockerfile                  # CPU-only PyTorch build, used for Render deployment
+│   ├── requirements.txt            # Pinned deps, incl. lap==0.5.13 (YOLO autoinstall disabled)
 │   └── app/
 │       ├── main.py                 # FastAPI app, routes, authenticated WebSocket, PDF endpoint
 │       ├── api/
@@ -154,8 +169,8 @@ AI_Traffic_Analyzer/
 │       │   ├── settings_schemas.py # Settings request/response models
 │       │   └── analytics_schemas.py# Analytics summary response models
 │       └── core/
-│           ├── pipeline.py         # Detection + tracking + counting + density (vehicle-class filtered)
-│           ├── database.py         # SQLAlchemy engine/session setup
+│           ├── pipeline.py         # Detection + tracking + counting + density; auto CUDA/CPU device select
+│           ├── database.py         # SQLAlchemy engine/session setup (normalizes postgresql+psycopg2://)
 │           ├── db_models.py        # User, UserSettings, Session, FrameSnapshot, VehicleCount
 │           ├── security.py         # bcrypt hashing, JWT creation/verification
 │           ├── dependencies.py     # get_current_user route guard
@@ -163,6 +178,7 @@ AI_Traffic_Analyzer/
 │           ├── report_generator.py # PDF report generation (ReportLab + Matplotlib)
 │           └── config.py           # env-based settings, shared directory constants
 ├── frontend/
+│   ├── vercel.json                  # SPA rewrite rules for Vercel static hosting
 │   └── src/
 │       ├── App.tsx                 # Root app shell, auth-aware routing
 │       ├── contexts/
@@ -190,7 +206,7 @@ AI_Traffic_Analyzer/
 │           ├── ProfileView.tsx      # Real editing, password change, stats, photo upload
 │           ├── AboutView.tsx
 │           └── UploadModal.tsx
-├── database/                       # SQLite file lives here at runtime
+├── database/                       # Local DB tooling/migrations folder (production data lives in Supabase PostgreSQL)
 ├── .gitignore
 └── README.md
 ```
@@ -201,7 +217,8 @@ AI_Traffic_Analyzer/
 - Python 3.10+
 - Node.js 18+
 - A Gmail account with an [App Password](https://myaccount.google.com/apppasswords) (for password reset and density alert emails)
-- (Optional) NVIDIA GPU + CUDA for faster inference
+- A [Supabase](https://supabase.com) project (free tier) for the PostgreSQL database, or any PostgreSQL connection string
+- (Optional) NVIDIA GPU + CUDA for faster inference — otherwise the pipeline auto-detects and runs on CPU
 
 ### Clone the repository
 ```bash
@@ -209,17 +226,21 @@ git clone https://github.com/adityyapratapsingh22/YatayatAi.git
 cd YatayatAi
 ```
 
+### Backend setup
+```bash
 cd backend
-```
 python -m venv venv
 venv\Scripts\Activate.ps1       # Windows PowerShell
 # source venv/bin/activate      # Linux / macOS
 
-pip install ultralytics opencv-python fastapi "uvicorn[standard]" python-multipart websockets sqlalchemy psycopg2-binary "passlib[bcrypt]" "python-jose[cryptography]" python-dotenv "pydantic[email]" reportlab matplotlib
+pip install -r requirements.txt
+# GPU machines: optionally reinstall torch/torchvision with CUDA wheels afterward for full-speed inference;
+# the pinned requirements.txt installs CPU-only PyTorch by default (matches the Docker/Render build).
 
 # Configure your environment variables
 copy .env.example .env          # Windows
 # cp .env.example .env          # Linux / macOS
+# Fill in SECRET_KEY, SMTP_*, and DATABASE_URL (your Supabase PostgreSQL connection string)
 ```
 
 ### Frontend setup
@@ -229,12 +250,38 @@ npm install
 
 # Create a .env file:
 # VITE_API_BASE_URL=http://localhost:8000
-# VITE_WS_BASE_URL=ws://localhost:8000/ws/analytics
+# VITE_WS_BASE_URL=ws://localhost:8000/ws/analytics   # optional — auto-derived from VITE_API_BASE_URL if omitted
 
 npm run dev
 ```
 
 Open **http://localhost:3000** with the backend running at **http://localhost:8000**. Register a new account to get started — all analysis features require being signed in.
+
+## ☁️ Deployment
+
+The app runs as two separately deployed services talking to a shared Supabase PostgreSQL database — no server to manage by hand.
+
+| Service | Platform | Notes |
+|---|---|---|
+| Backend (FastAPI + YOLO) | **Render** | Built from `backend/Dockerfile`; CPU-only PyTorch wheels keep the image small and buildable on Render's free tier. |
+| Frontend (React build) | **Vercel** | Static build; `frontend/vercel.json` adds SPA rewrites so client-side routes don't 404 on refresh. |
+| Database | **Supabase PostgreSQL** | Session/transaction pooler connection string, shared by both environments. |
+
+**Backend environment variables (Render):**
+- `DATABASE_URL` — Supabase connection string. Accepts `postgres://` or `postgresql://`; the app normalizes either to `postgresql+psycopg2://` so SQLAlchemy 2.x doesn't try to load `psycopg` v3 instead of the installed `psycopg2-binary`.
+- `FRONTEND_URL` — your Vercel URL, added to the CORS allow-list alongside an `allow_origin_regex` for any `*.vercel.app` preview deployment.
+- `SECRET_KEY`, `SMTP_*` — same as local setup.
+
+**Frontend environment variables (Vercel):**
+- `VITE_API_BASE_URL` — your Render backend URL. `VITE_WS_BASE_URL` can be left unset; it's derived automatically (`http`→`ws`, `https`→`wss`).
+
+**CPU-only free-tier behavior:**
+- `pipeline.py` auto-detects `torch.cuda.is_available()` and falls back to CPU with no config needed.
+- On CPU, video is downscaled to a max width of 960px and every 2nd frame is skipped (`vid_stride=2`) to stay within Render's 512MB free-tier memory limit, with a periodic `gc.collect()` pass.
+- YOLO inference now runs inside a `ThreadPoolExecutor`, bridged to the WebSocket via an `asyncio.Queue`, so the event loop stays responsive to Render's health-check pings instead of blocking during analysis.
+- Ultralytics' runtime auto-install is disabled (`YOLO_AUTOINSTALL=False`) and `lap==0.5.13` is pinned in `requirements.txt`, since an on-the-fly dependency install previously crashed the pipeline on Render.
+
+**Cold-start handling:** Render's free tier spins the backend down after inactivity and can take up to ~60–90 seconds to wake. The dashboard pings the backend's root endpoint first, then opens the WebSocket with automatic retries (backoff up to ~90s total) and shows a "waking up" status banner instead of a dead connection.
 
 ## 🖥️ Application Pages
 
@@ -273,7 +320,7 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 |---|---|
 | FastAPI backend with `/api/upload` | ✅ Done |
 | Live WebSocket analytics streaming | ✅ Done |
-| SQLite persistence (sessions, snapshots, counts) | ✅ Done |
+| Cloud persistence via Supabase PostgreSQL (sessions, snapshots, counts) | ✅ Done |
 | Session history REST endpoints | ✅ Done |
 | User registration & login (bcrypt + JWT) | ✅ Done |
 | JWT access + refresh token flow | ✅ Done |
@@ -313,10 +360,13 @@ Open **http://localhost:3000** with the backend running at **http://localhost:80
 ### Deployment & Extras
 | Task | Status |
 |---|---|
-| Docker packaging | ❌ Not started |
-| Live camera / RTSP feed support | ❌ Not started |
-| Vehicle speed estimation | ❌ Not started |
-| Multi-camera support | ❌ Not started |
+| Docker packaging (CPU-only PyTorch image) | ✅ Done |
+| Backend deployed on Render | ✅ Done |
+| Frontend deployed on Vercel (SPA rewrites configured) | ✅ Done |
+| Automatic CUDA/CPU device detection in the pipeline | ✅ Done |
+| CPU-tier performance tuning (resolution cap, frame skip, GC) | ✅ Done |
+| Pipeline moved off the event loop (ThreadPoolExecutor + asyncio.Queue) | ✅ Done |
+| WebSocket auto-retry with backoff for cold starts | ✅ Done |
 
 ---
 
@@ -335,6 +385,12 @@ A deliberate audit pass was done before deployment work began, plus one bug caug
 | Fake hardcoded notification alerts | 🟢 Cleanup | Replaced with an honest empty state. |
 | Non-functional "Search Nodes" search bar | 🟢 Cleanup | Removed. |
 | Duplicate `AVATAR_DIR` constant defined in two files | 🟢 Cleanup | Consolidated into one shared setting in `config.py`. |
+| SQLAlchemy 2.x loaded `psycopg` v3 instead of the installed `psycopg2-binary` on a bare `postgresql://` URL | 🔴 Critical | `database.py` now normalizes `postgres://`/`postgresql://` to `postgresql+psycopg2://` before creating the engine, and adds `pool_pre_ping=True`. |
+| Blocking YOLO inference ran directly on the asyncio event loop, starving Render's HTTP health-check requests and risking the dyno being killed mid-analysis | 🔴 Critical | Pipeline now runs in a `ThreadPoolExecutor`, bridged to the WebSocket sender via an `asyncio.Queue`, keeping the event loop free. |
+| Full-resolution CPU inference could exhaust memory and crash on Render's 512MB free tier | 🟠 Bug | Capped processing width to 960px and added frame-skipping (`vid_stride=2`) plus periodic `gc.collect()` when running on CPU. |
+| Ultralytics' runtime auto-install of the `lap` dependency failed or crashed mid-pipeline on Render | 🟠 Bug | Pinned `lap==0.5.13` in `requirements.txt` and set `YOLO_AUTOINSTALL=False`. |
+| WebSocket failed immediately (no retry) on Render's cold start, leaving the dashboard stuck on a generic error | 🟠 Bug | Added an HTTP pre-ping to wake the backend, then automatic WebSocket reconnect with backoff (~90s window) and a visible "waking up" status banner. |
+| Upload failure message hardcoded a `localhost:8000` reference even in production | 🟢 Cleanup | Removed the hardcoded URL from the error message. |
 
 **Note:** the vehicle-classification fix only affects analyses run *after* the fix — any session recorded before it may have inflated counts from nearby pedestrians. Clearing the database for a fresh start is recommended before any formal accuracy evaluation.
 
@@ -350,6 +406,8 @@ Detection uses YOLO pretrained on COCO out of the box — no training required t
 - PDF reports can only be generated for sessions that have finished processing (`ended_at` is set) — an in-progress session's report button is disabled by design.
 - Password reset and density-alert emails require a real Gmail App Password to be configured — without it, those flows fail at the email-sending step.
 - Profile photos are stored on local disk, not cloud storage — fine for a single-instance deployment, but wouldn't survive a container redeploy without a persistent volume.
+- On Render's free tier, the backend spins down after inactivity and can take ~60–90 seconds to cold-start; the frontend retries automatically and shows a status banner, but the first analysis after idle time will be slower to connect.
+- Cloud (CPU-only) inference runs at a capped 960px width with every 2nd frame skipped to fit Render's 512MB memory limit — detection accuracy and smoothness are slightly reduced versus a local GPU run.
 
 ## 📄 License
 
