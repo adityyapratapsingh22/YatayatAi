@@ -6,6 +6,14 @@ import type { ProfileStats } from '../services/authApi';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+// avatar_url from the server is either a base64 data URL ("data:image/...") stored
+// in PostgreSQL, or a legacy "/avatars/..." disk path.  Data URLs are self-contained
+// and must NOT have the API base prepended.
+const buildAvatarUrl = (raw: string, version: number) => {
+  if (raw.startsWith('data:')) return raw;
+  return `${API_BASE_URL}${raw}?v=${version}`;
+};
+
 export const ProfileView: React.FC = () => {
   const { user, updateProfile, uploadAvatar, avatarVersion } = useAuth();
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -20,8 +28,8 @@ export const ProfileView: React.FC = () => {
       setAvatarError('Please select an image file');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setAvatarError('Image must be under 5MB');
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarError('Image must be under 2MB');
       return;
     }
 
@@ -135,7 +143,7 @@ export const ProfileView: React.FC = () => {
             >
               {user?.avatar_url ? (
                 <img
-                  src={`${API_BASE_URL}${user.avatar_url}?v=${avatarVersion}`}
+                  src={buildAvatarUrl(user.avatar_url, avatarVersion)}
                   alt={user.full_name}
                   className="w-full h-full object-cover"
                 />

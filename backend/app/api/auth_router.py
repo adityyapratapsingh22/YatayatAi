@@ -119,30 +119,22 @@ async def upload_avatar(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be an image")
 
     contents = await file.read()
-    max_size_bytes = 5 * 1024 * 1024  # 5MB
+    max_size_bytes = 2 * 1024 * 1024  # 2MB — keeps the DB row small
     if len(contents) > max_size_bytes:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Image must be under 5MB")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Image must be under 2MB")
 
-    ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
-    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
-        ext = ".jpg"
+    # Derive the MIME type from the upload's declared content_type so the data URL
+    # works in all browsers.  Fall back to image/jpeg for unknown types.
+    mime = file.content_type if file.content_type else "image/jpeg"
 
-    os.makedirs(settings.AVATAR_DIR, exist_ok=True)
-    filename = f"user_{current_user.id}{ext}"
-    filepath = os.path.join(settings.AVATAR_DIR, filename)
+    # Store the avatar as a base64 data URL directly in Supabase PostgreSQL.
+    # This makes avatars survive Render restarts, deploys, and sleep cycles —
+    # Render's local filesystem is ephemeral and is wiped on every restart.
+    import base64
+    b64 = base64.b64encode(contents).decode("utf-8")
+    data_url = f"data:{mime};base64,{b64}"
 
-    # Clean up a previously uploaded avatar with a different extension, so re-uploading
-    # a PNG after a JPG doesn't leave the old file orphaned on disk.
-    if current_user.avatar_url:
-        old_filename = os.path.basename(current_user.avatar_url)
-        old_filepath = os.path.join(settings.AVATAR_DIR, old_filename)
-        if old_filename != filename and os.path.exists(old_filepath):
-            os.remove(old_filepath)
-
-    with open(filepath, "wb") as f:
-        f.write(contents)
-
-    current_user.avatar_url = f"/avatars/{filename}"
+    current_user.avatar_url = data_url
     db.add(current_user)
     db.commit()
     db.refresh(current_user)

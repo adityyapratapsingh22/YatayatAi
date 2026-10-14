@@ -147,14 +147,22 @@ function AppShell() {
     }
   }
 
-  // Real photo (cache-busted) if uploaded, otherwise the default placeholder
+  // Real photo if uploaded, otherwise the default placeholder.
+  // avatar_url is either a base64 data URL ("data:image/...") stored in the DB
+  // (persists across Render restarts), or a legacy "/avatars/..." disk path.
+  // Only prepend API_BASE_URL + cache-buster for the legacy disk-path format.
+  const buildAvatarUrl = (raw: string) => {
+    if (raw.startsWith('data:')) return raw;               // base64 — use as-is
+    return `${API_BASE_URL}${raw}?v=${avatarVersion}`;     // legacy disk path
+  };
+
   const displayUser: UserProfile = user
     ? {
         ...DEFAULT_USER_PROFILE,
         name: user.full_name,
         email: user.email,
         avatarUrl: user.avatar_url
-          ? `${API_BASE_URL}${user.avatar_url}?v=${avatarVersion}`
+          ? buildAvatarUrl(user.avatar_url)
           : DEFAULT_USER_PROFILE.avatarUrl,
       }
     : DEFAULT_USER_PROFILE;
