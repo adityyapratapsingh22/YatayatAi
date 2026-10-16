@@ -43,11 +43,9 @@ export const LandingView: React.FC<LandingViewProps> = ({ onNavigate }) => {
       {/* Top Brand Bar for Landing */}
       <header className="h-20 w-full bg-[#080808]/90 backdrop-blur-md border-b border-white/10 sticky top-0 z-50 px-6 md:px-12 flex items-center justify-between">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => onNavigate('landing')}>
-          <div className="w-8 h-8 rounded bg-white text-black flex items-center justify-center font-bold">
-            <Video className="w-4 h-4 text-black" />
-          </div>
+          <img src="/logo.svg" alt="YatayatAi Logo" className="w-8 h-8 rounded object-contain" />
           <span className="text-sm font-semibold tracking-[0.2em] uppercase text-white">
-            Traffic Analyzer
+            YatayatAi
           </span>
         </div>
 

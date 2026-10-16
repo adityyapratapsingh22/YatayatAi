@@ -41,15 +41,13 @@ export const Sidebar: React.FC<NavigationProps> = ({
         onClick={() => setActiveTab('landing')}
         className="p-5 border-b border-white/10 flex items-center gap-3 cursor-pointer hover:bg-white/[0.03] transition-colors"
       >
-        <div className="w-9 h-9 rounded bg-white text-black flex items-center justify-center font-bold shadow-sm">
-          <Camera className="w-4 h-4 text-black" />
-        </div>
+        <img src="/logo.svg" alt="YatayatAi Logo" className="w-9 h-9 rounded object-contain shadow-sm" />
         <div>
           <h1 className="text-[15px] font-medium tracking-tight text-[#F0F0F0] leading-tight">
-            Traffic Analyzer
+            YatayatAi
           </h1>
           <p className="text-[10px] font-mono-data uppercase tracking-widest text-white/40">
-            Obsidian Core 4.2
+            Traffic Intelligence
           </p>
         </div>
       </div>
@@ -185,11 +183,9 @@ export const TopNavbar: React.FC<NavigationProps> = ({
             onClick={() => setActiveTab('landing')}
             className="flex items-center gap-3 cursor-pointer group"
           >
-            <div className="w-7 h-7 rounded bg-white text-black flex items-center justify-center font-bold">
-              <Camera className="w-3.5 h-3.5 text-black" />
-            </div>
+            <img src="/logo.svg" alt="YatayatAi Logo" className="w-7 h-7 rounded object-contain" />
             <span className="text-sm font-semibold tracking-widest uppercase text-white">
-              Traffic Analyzer
+              YatayatAi
             </span>
           </div>
 

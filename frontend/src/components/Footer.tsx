@@ -13,11 +13,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavClick }) => {
         {/* Left: Brand & Coordinates */}
         <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-white text-black flex items-center justify-center font-bold">
-              <Video className="w-3 h-3 text-black" />
-            </div>
+            <img src="/logo.svg" alt="YatayatAi Logo" className="w-5 h-5 rounded object-contain" />
             <span className="text-white font-medium uppercase tracking-[0.2em] text-[11px]">
-              Traffic Analyzer
+              YatayatAi
             </span>
           </div>
 

@@ -35,10 +35,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSuccessLogin, onNavigate
 
       <div className="w-full max-w-md bg-[#0e0e0e] rounded p-8 border border-white/10 shadow-2xl relative z-10">
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-12 h-12 rounded bg-white text-black flex items-center justify-center p-2.5 shadow-lg mb-4">
-            <Video className="w-6 h-6 text-black" />
-          </div>
-          <h1 className="text-xl font-light tracking-tight text-[#F0F0F0]">Traffic Analyzer</h1>
+          <img src="/logo.svg" alt="YatayatAi Logo" className="w-12 h-12 rounded object-contain mb-4 shadow-lg" />
+          <h1 className="text-xl font-light tracking-tight text-[#F0F0F0]">YatayatAi</h1>
           <p className="text-[10px] text-white/40 mt-1 uppercase tracking-widest">Sign in to your account</p>
         </div>
 
